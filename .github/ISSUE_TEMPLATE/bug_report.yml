@@ -1,0 +1,41 @@
+name: Something does not work
+description: A wrong answer, an error, an install or upgrade that fails.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Leave real people's data out: no end user's memories, facts or id, no API key, no model provider's key. A placeholder shows the bug as well. A vulnerability goes to security@korely.ai (SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`curl -s https://your-domain/health` says it, and so does `VERSION`."
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - An install of my own
+        - The Cloud (api.korely.ai)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: The request, its answer, and the answer you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+  - type: textarea
+    id: state
+    attributes:
+      label: The install's state
+      description: |
+        For an install of your own: `docker compose exec api python -m korely_agent.manage status`, `extraction` from `/health`, `EMBEDDING_PROVIDER`, and the writer (Europe or Global, the provider). The lines of `docker compose logs api` around the failure, read before pasting.
+      render: text

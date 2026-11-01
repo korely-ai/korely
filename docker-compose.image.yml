@@ -1,0 +1,17 @@
+# The published image instead of a build. install.sh puts these two lines in
+# .env unless it is told --build, and `docker compose` reads them from there:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.image.yml
+#   KORELY_IMAGE=ghcr.io/korely-ai/korely-agent:<version>
+#
+# A release, never `latest`: the tag and the image are the same promise
+# (scripts/release.sh). The build is taken away, not left as a fallback: a
+# folder with only these files has no source to build from, and a missing
+# image is better pulled than failed over to a build that cannot work.
+# `!reset` needs Docker Compose 2.24.4 or later (January 2024).
+#
+# docker-compose.yml alone, as before, builds the image from this checkout.
+services:
+  api:
+    image: ${KORELY_IMAGE:?set KORELY_IMAGE in .env to the image to run}
+    build: !reset null

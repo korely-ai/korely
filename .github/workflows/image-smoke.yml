@@ -1,0 +1,99 @@
+# The published image, started (2026-10-06). After the image workflow pushes a
+# release's two images to GHCR, each one is pulled and run the way an install
+# runs it (its entrypoint: the migrations, then the server) against Postgres
+# with pgvector, and checked from outside by scripts/smoke_image.py: /health
+# says the version, a fresh tenant's key writes a memory, and the default image
+# finds it again by its meaning, in the search and in /v1/context, with no
+# external key (EmbeddingGemma computes the vectors in the image). The Gemini
+# image has no key here: its write is accepted and its search says it cannot
+# run. Until today the image customers pull was never started by anything.
+#
+# By hand: `gh workflow run image-smoke.yml -f version=0.1.19`.
+name: image-smoke
+
+on:
+  workflow_run:
+    workflows: ["image"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The published version to check, for example 0.1.19"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        embedder: [local, gemini]
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: korely
+          POSTGRES_PASSWORD: smoke-only-password
+          POSTGRES_DB: korely
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U korely -d korely"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # A release tag (vX.Y.Z) names the version; an image built by hand from
+      # an older tag runs on the default branch, and is checked by hand.
+      - name: The version and the image
+        id: v
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          RUN_REF: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          v="${INPUT_VERSION:-${RUN_REF#v}}"
+          case "$v" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "no release version to check ('$v'): run it by hand with -f version=X.Y.Z" >&2; exit 1 ;;
+          esac
+          suffix=""
+          [ "${{ matrix.embedder }}" = gemini ] && suffix="-gemini"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:${v}${suffix}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start the image as an install starts it
+        run: |
+          docker run -d --name api --network host \
+            -e DATABASE_URL=postgresql://korely:smoke-only-password@localhost:5432/korely \
+            "${{ steps.v.outputs.image }}"
+          for i in $(seq 1 90); do
+            curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          docker logs api 2>&1 | tail -40
+          echo "the image did not answer /health in three minutes" >&2
+          exit 1
+
+      - name: A tenant, a memory written and found again
+        run: |
+          KEY=$(docker exec api python -m korely_agent.manage create-tenant --name smoke 2>/dev/null \
+                | grep -o 'kor_self_[A-Za-z0-9_-]\{43\}' | head -1)
+          [ -n "$KEY" ] || { docker logs api 2>&1 | tail -40; echo "no key" >&2; exit 1; }
+          echo "::add-mask::$KEY"
+          python3 scripts/smoke_image.py --url http://127.0.0.1:8000 --key "$KEY" \
+            --version "${{ steps.v.outputs.version }}" --embedder "${{ matrix.embedder }}"
+
+      - name: The server's log, on failure
+        if: failure()
+        run: docker logs api 2>&1 | tail -80

@@ -1,0 +1,152 @@
+# A working install. Three containers: Postgres, this application, and Caddy in
+# front of it doing TLS. A fourth runs for a moment at each start, to hand the
+# export directory (./facts) to the application's user, and exits.
+#
+#   cp .env.example .env      # set POSTGRES_PASSWORD, SECRET_KEY and DOMAIN
+#   docker compose up -d
+#   docker compose exec api python -m korely_agent.manage create-tenant --name "Acme"
+#
+# The last command prints an API key. It is shown once.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    # Postgres in Docker gets 64MB of /dev/shm by default, and that is not
+    # enough for a parallel index build: on 50k vectors the HNSW build fails
+    # with "could not resize shared memory segment", which reads like a disk
+    # problem and is not one. It also limits any parallel query. Measured on a
+    # CPX22 on 2026-09-12.
+    shm_size: 1gb
+    # The server's log keeps no value of the data (audit of 27 Oct 2026). By
+    # default Postgres writes, for every failed statement, the statement with
+    # its literals (STATEMENT:) and the values of the violated key (DETAIL:),
+    # and the application causes such failures on ordinary paths (a fact
+    # restated, a write that waited past its lock timeout): an end user's id,
+    # a fact's words, a memory's text, in a log an erasure never reaches. So
+    # no statement is logged with an error, and an error is written terse
+    # (no DETAIL, HINT, QUERY or CONTEXT). The error's message itself stays.
+    # Keep both if you run your own Postgres (docs/guide/operations.md, "The database's log").
+    command: ["postgres", "-c", "log_min_error_statement=panic", "-c", "log_error_verbosity=terse"]
+    environment:
+      POSTGRES_USER: korely
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: korely
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U korely -d korely"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # The other two services had this and the database did not, so a reboot
+    # brought back Caddy and the API and left the database down. The API then
+    # sat in a restart loop looking for it, Caddy answered, and the address
+    # returned 502: the failure shape where a check that only asks "is 443
+    # alive" says everything is fine. A reboot is not an incident, it is what
+    # happens on every kernel update, so somebody hosting this finds out on a
+    # Monday morning.
+    restart: unless-stopped
+    # Rotated, like the API's log (the reason is there).
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # TLS terminates here. Comment this service out only if you already run a
+  # proxy in front, and then keep the api port bound to localhost, and have
+  # that proxy overwrite X-Forwarded-For with the client's address rather
+  # than append to it: the API takes the leftmost entry as the client (the
+  # Dockerfile's CMD says why; docs/guide/operations.md, "Your own proxy in front").
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [api]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      # Point it at Let's Encrypt's staging directory while evaluating, and the
+      # rate limit below stops mattering. See the Caddyfile.
+      #
+      # The default is written out in full, not left empty: Caddy falls back
+      # to its own default only when the variable does NOT exist, and an empty
+      # string reaches it as a missing argument. Tried: an empty `acme_ca` does
+      # not start, so every install would have gone down at its first upgrade.
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificates: losing this re-issues them, and
+      - caddy_config:/config   # Let's Encrypt rate-limits how often you may
+    ports: ["${HTTPS_PORT:-443}:443", "${HTTP_PORT:-80}:80"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # The Markdown export (`FACTS_EXPORT_DIR=/data/facts` in .env) lands in
+  # ./facts on this machine, next to backups/, where git can see it. It used
+  # to land nowhere: the example value named a directory the container did not
+  # have, and the worker logged Permission denied on every tick (a tester,
+  # 2026-09-28). Docker creates a missing host directory as root and the API
+  # runs as uid 1000, so this hands the directory over and exits, before the
+  # API starts. It reuses the database image: nothing more to download. The
+  # `|| true` is for Docker Desktop, whose shared folders may refuse a chown
+  # they do not need; if a Linux host refuses it, the worker's log says so.
+  facts-dir:
+    image: pgvector/pgvector:pg17
+    user: "0:0"
+    entrypoint: ["sh", "-c", "chown 1000:1000 /facts || true"]
+    volumes: ["./facts:/facts"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      # The local embedder's model is downloaded by the build unless .env
+      # says EMBEDDING_PROVIDER=gemini (Dockerfile, stage `model`). Changing
+      # it means building again, docker compose up -d --build, and computing
+      # the stored vectors again (docs/guide/install.md, step 7).
+      args:
+        EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+    depends_on:
+      db: {condition: service_healthy}
+      facts-dir: {condition: service_completed_successfully}
+    env_file: [.env]
+    # The URL names no password and the password travels apart: spliced raw
+    # into the URL, one with `@`, `#` or `%` in it made another URL, and
+    # alembic printed it whole, password included, in its error (audit of 17
+    # Oct 2026). The application quotes it into the URL (config.py).
+    #
+    # DOMAIN and HTTPS_PORT as Caddy gets them: entrypoint.sh builds from them
+    # the address it advertises to OAuth and MCP clients, https://DOMAIN, when
+    # PUBLIC_BASE_URL is unset. HTTPS_PORT came only from a .env that set it,
+    # so an install on the commented default advertised http://localhost:8000
+    # and the 0.1.40 notes promised https://localhost (audit of 18 Oct
+    # 2026).
+    environment:
+      DATABASE_URL: postgresql://korely@db:5432/korely
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      DOMAIN: ${DOMAIN:-}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
+    volumes: ["./facts:/data/facts"]
+    # Bound to loopback: reachable through Caddy, not from the network. An
+    # API that also answers on plain HTTP makes the TLS in front of it
+    # decorative.
+    ports: ["127.0.0.1:${PORT:-8000}:8000"]
+    restart: unless-stopped
+    # A ceiling on the API's memory, so a runaway cannot take the machine's
+    # database and proxy down with it. Measured on 18 Oct 2026 (0.2.0's
+    # code, the local embedder loaded): 704 MiB at rest, 741 MiB under 16
+    # parallel clients of searches and contexts (960 requests, all answered),
+    # 771 MiB the highest since start, writes included. Twice that, so a peak
+    # does not restart the service: a ceiling too low restarts it in the
+    # middle of a write, which is worse than none. API_MEMORY_LIMIT changes
+    # it (e.g. 3g for a bigger batch, or a machine with other jobs).
+    mem_limit: ${API_MEMORY_LIMIT:-1536m}
+    # Docker keeps a container's output for ever unless told otherwise: the
+    # disk filled a little every day, and the access lines carry the callers'
+    # IP addresses, which a log should not keep for ever either. The sizes of
+    # the hosted service (2026-10-11). Logs shipped through another driver:
+    # set yours in docker-compose.override.yml.
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
