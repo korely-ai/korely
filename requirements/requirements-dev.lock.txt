@@ -1459,9 +1459,9 @@ sqlalchemy==2.0.54 \
     #   -c requirements.lock.txt
     #   -r requirements.txt
     #   alembic
-sse-starlette==3.4.11 \
-    --hash=sha256:1bae716c02f3e6f294be41ff333220692dae7c3cbab077c900f159676719dade \
-    --hash=sha256:c7b2244bdff016fe7f64e10075e89a3e6bbf899649cc89b0fe884b5545042453
+sse-starlette==3.6.0 \
+    --hash=sha256:623151d6c20dc0eebf1b3379c27faae91fff883bac7ab6665f16f46440a88b3a \
+    --hash=sha256:e4dfa4d237d2712cb2b4d4918eda9b457cd6b44bbecdc838af75de836565bafd
     # via
     #   -c requirements.lock.txt
     #   mcp
