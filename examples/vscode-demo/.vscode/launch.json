@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Agent A: support bot (writes)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/agent_support.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Agent B: complaints desk (reads)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/agent_auditor.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

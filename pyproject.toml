@@ -1,0 +1,33 @@
+[project]
+name = "korely-agent"
+# Kept in step with the VERSION file by scripts/check_the_version.py, which
+# `make test` runs: two places that can disagree are one place that lies.
+version = "1.0.4"
+description = "Memory for AI agents that knows what was true when. Self-hosted, Postgres-only."
+readme = "README.md"
+requires-python = ">=3.11"
+# Apache 2.0, as an SPDX expression (PEP 639, setuptools 77 and later), with
+# the files that must travel with every copy. No "License ::" classifier:
+# PEP 639 replaces it with the expression, and setuptools refuses a project
+# that declares both.
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Massimiliano Martella" }]
+
+[project.urls]
+Homepage = "https://korely.ai"
+Source = "https://github.com/korely-ai/korely-agent"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "db: needs a real Postgres (run with `make test-all`)",
+    "real_network: talks to a real external service; the network is closed otherwise (tests/conftest.py), run with RUN_REAL_NETWORK=1",
+    "cloud: needs the Cloud's package (korely_agent/hosted/); skipped where the tree does not carry it (tests/conftest.py)",
+]
+
+[build-system]
+# 77 is the first that reads `license` as an SPDX expression.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"

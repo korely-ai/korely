@@ -1,0 +1,51 @@
+# What `docker build .` and `docker compose up --build` send to the builder.
+#
+# Everything is left out, and then exactly what the two Dockerfiles copy is let
+# back in. Without this file the whole directory went along on every build:
+# dashboard/node_modules (127 MB), scripts/node_modules, .git, and on a machine
+# that has been running for a while `backups/` with the database dumps in it
+# and `.env` with the passwords. None of that is read by the build, and an
+# install whose builder is remote would upload it.
+#
+# The dashboard's node_modules also got into the image itself: `COPY dashboard/`
+# followed `npm ci` and laid the builder's own packages over the ones just
+# installed for the image's platform. The Dockerfile now names its sources one
+# by one, so that no longer depends on this file; this file is what keeps the
+# 127 MB off the wire.
+#
+# Matching follows Docker's rules, not git's: a pattern is anchored at the root
+# of the context, `**` crosses directories, and the last matching line wins.
+# https://docs.docker.com/build/concepts/context/#dockerignore-files
+# tests/test_build_context.py reads this file with those rules and fails if a
+# file a Dockerfile copies is left out, or if node_modules, .git, .env or a
+# backup can get in.
+*
+
+# The product image (Dockerfile). Not scripts/: those are the developer's
+# tools, run from a checkout and never inside the product container (the
+# Dockerfile says why, next to where it used to copy them).
+!requirements/requirements.lock.txt
+!alembic
+!VERSION
+!LICENSE
+!NOTICE
+!korely_agent
+!deploy/entrypoint.sh
+!dashboard
+# The terms of the local embedder's model, put next to its weights.
+!licenses
+
+# The test image (Dockerfile.dev).
+!requirements/requirements-dev.lock.txt
+
+# Inside what came back in, what is never source. After the lines above, so
+# that it wins.
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.DS_Store
+dashboard/dist
+dashboard/.env
+dashboard/.env.local

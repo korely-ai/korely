@@ -1,0 +1,9 @@
+# A vulnerability never goes in an issue: SECURITY.md (audit of 17 Oct 2026).
+blank_issues_enabled: false
+contact_links:
+  - name: A security vulnerability
+    url: https://korely.ai/.well-known/security.txt
+    about: Write to security@korely.ai, not here. An issue is public, read by anybody before a fix exists.
+  - name: Support, setup and commercial questions
+    url: mailto:info@korely.ai
+    about: Write to info@korely.ai.
