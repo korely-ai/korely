@@ -50,7 +50,7 @@ httpcore>=1.0,<2
 # 2026): starlette is imported beside FastAPI (main.py, api/spa.py,
 # api/oauth.py), which accepts any starlette from 0.46 on; pydantic-core
 # carries the request bodies' own errors (api/_bodies.py).
-starlette>=1.0,<1.8
+starlette>=1.10.0,<1.11
 pydantic-core>=2.23,<2.47
 # anyio shields an MCP tool call cancelled by its client until the call's
 # thread has ended (core/threads.off_the_loop, audit of 20 Oct 2026);
