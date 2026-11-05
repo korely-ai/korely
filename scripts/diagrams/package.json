@@ -1,0 +1,13 @@
+{
+  "name": "korely-agent-diagrams",
+  "private": true,
+  "description": "Renders docs/assets/diagrams/*.excalidraw to docs/assets/*.svg (scripts/make_diagrams.sh).",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "esbuild": "0.25.12",
+    "playwright": "1.56.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}
