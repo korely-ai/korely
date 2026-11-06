@@ -76,7 +76,7 @@ RELEASE_SHA256="
 # stamped after that by `scripts/stamp_installer.py digest` (the last step
 # release.sh prints). Until then the image is pulled by its tag, with a
 # warning.
-THIS_IMAGE_DIGEST=""
+THIS_IMAGE_DIGEST="sha256:52b40a5fad564d8e0fc443002c56e84c23ce2902c5043bc03564866b62047be5"
 
 # The public repository, owner/name, the one name the three addresses below
 # are made of. The image is the one its CI pushes, ghcr.io/<owner>/<repository>
