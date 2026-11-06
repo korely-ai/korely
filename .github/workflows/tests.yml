@@ -1,0 +1,67 @@
+# The test suite on a clean machine (since 2026-10-06): on every release tag,
+# and by hand. A suite that passes only on the author's
+# laptop is not a test (Makefile), and until today nothing else ran it.
+#
+# The same commands as on the laptop: the test image built from dev/Dockerfile.dev
+# and the lock, Postgres with pgvector from dev/docker-compose.test.yml, then the
+# whole suite and the migration check; and the dashboard's type check and
+# build, which the image build runs too. Not on every push: a private
+# repository's Actions minutes are counted, about 8 a run.
+name: tests
+
+on:
+  # On a release tag only (since 16 Oct 2026).
+  # Every night until 14 Oct, then every Monday until 16 Oct: GitHub Free's
+  # 2,000 minutes a month for a private repository, Actions' budget at $0
+  # (a run past the minutes waits for the next month), and on 16 Oct 1,803 of
+  # them were gone. The suite still runs twice before anything is published:
+  # in scripts/release.sh on this machine, and here on the tag.
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: One version, said the same way everywhere
+        run: |
+          make image
+          docker run --rm -v "$PWD:/w" -w /w -e PYTHONPATH=/w korely-agent-dev:latest \
+            python scripts/check_the_version.py
+
+      - name: The whole suite, on Postgres with pgvector
+        run: make test-all
+
+      - name: The migrations give the models' schema
+        run: make migrate-check
+
+      - name: Stop the database
+        if: always()
+        run: make db-down
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run build

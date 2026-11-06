@@ -1,0 +1,33 @@
+# scripts/soak.sh's stack: one Korely process with its worker on one Postgres
+# whose data lives on a volume (the disk it takes is part of what is
+# measured), the stand-in writer of scripts/two_processes/. Not an install:
+# see docker-compose.yml.
+name: korely-soak
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    shm_size: 1gb
+    environment: {POSTGRES_USER: korely, POSTGRES_PASSWORD: soak, POSTGRES_DB: korely}
+    volumes: ["soakdata:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U korely -d korely"], interval: 2s, retries: 30}
+  writer:
+    image: ${KORELY_IMAGE}
+    entrypoint: ["uvicorn", "fake_model:app", "--host", "0.0.0.0", "--port", "9000", "--app-dir", "/t", "--log-level", "warning"]
+    volumes: ["../two_processes:/t:ro"]
+    healthcheck: {disable: true}
+  api:
+    image: ${KORELY_IMAGE}
+    depends_on: {db: {condition: service_healthy}}
+    restart: "no"
+    environment:
+      POSTGRES_PASSWORD: soak
+      DATABASE_URL: postgresql://korely@db:5432/korely
+      SECRET_KEY: soak-only-a-throwaway-secret-key-0123
+      PUBLIC_BASE_URL: http://localhost:18021
+      EXTRACTION_PROVIDER: mistral
+      MISTRAL_API_KEY: none
+      MISTRAL_API_BASE: http://writer:9000/v1
+      MISTRAL_EXTRACTION_MODEL: stand-in
+    ports: ["127.0.0.1:18021:8000"]
+volumes:
+  soakdata: {}

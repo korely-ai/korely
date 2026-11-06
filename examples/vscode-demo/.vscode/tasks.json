@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Korely 0: Python environment",
+      "type": "shell",
+      "command": "python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt && .venv/bin/python -c 'import korely_memory; print(\"korely-memory\", korely_memory.__version__)'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 1: the store, on this machine",
+      "type": "shell",
+      "command": "sh setup_local.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 2: a key",
+      "type": "shell",
+      "command": ".venv/bin/python create_key.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 3: Agent A writes (support bot)",
+      "type": "shell",
+      "command": ".venv/bin/python agent_support.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 4: Agent B reads (complaints desk)",
+      "type": "shell",
+      "command": ".venv/bin/python agent_auditor.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 5: the graph on April 1",
+      "type": "shell",
+      "command": ".venv/bin/python open_graph.py --as-of 2026-04-01",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely 5b: the graph today, with history",
+      "type": "shell",
+      "command": ".venv/bin/python open_graph.py --now",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Korely: reset the story (erase c4821)",
+      "type": "shell",
+      "command": ".venv/bin/python reset_demo.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# The demo's key and dashboard login, written by create_key.py.
+.env
+.demo-login
+.venv/
+__pycache__/
