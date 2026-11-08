@@ -43,7 +43,7 @@ mcp>=1.26.0,<1.31
 # each delivery to the address the check approved (2026-10-06). A dependency
 # we import is a dependency we declare, or the day mcp or google-genai drops
 # it, an image build drops it too.
-cryptography>=42,<50.1
+cryptography>=50.0.2,<50.1
 httpx>=0.27,<0.29
 httpcore>=1.0,<2
 # The same rule, found by tests/test_requirements_lock.py (audit of 17 Oct
