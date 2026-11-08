@@ -55,7 +55,7 @@ pydantic-core>=2.23,<2.47
 # anyio shields an MCP tool call cancelled by its client until the call's
 # thread has ended (core/threads.off_the_loop, audit of 20 Oct 2026);
 # starlette and the MCP SDK already run on it.
-anyio>=4.0,<4.16
+anyio>=4.16.0,<4.17
 
 # The local embedder (EMBEDDING_PROVIDER=local, core/local_embedder.py): ONNX
 # Runtime runs EmbeddingGemma on the CPU, SentencePiece reads its tokenizer
