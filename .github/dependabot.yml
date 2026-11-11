@@ -1,0 +1,39 @@
+# Dependabot opens a pull request when an action, a Python package or a
+# dashboard package has a new release, and the repository's security alerts
+# name the vulnerable ones (audit of 17 Oct 2026: no configuration at all).
+#
+# A pull request is a proposal, not an upgrade. The actions are pinned to a
+# commit with the tag in a comment (a tag can be moved onto other code, and
+# image.yml runs with the token that publishes the images): Dependabot moves
+# the commit and the comment together. The Python ranges stop at the next
+# minor release on purpose (requirements.txt): a bump of a range lands with
+# `make lock` and `make test-all` in the same commit, and
+# tests/test_requirements_lock.py fails on a lock that disagrees with its
+# file. tests.yml runs on release tags only, so these pull requests spend no
+# Actions minutes until somebody runs the suite on them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # requirements/requirements.txt and requirements-dev.txt, with the two locks
+  # (requirements.lock.txt, requirements-dev.lock.txt) generated from them.
+  - package-ecosystem: pip
+    directory: /requirements
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /dashboard
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dashboard:
+        update-types: ["minor", "patch"]
