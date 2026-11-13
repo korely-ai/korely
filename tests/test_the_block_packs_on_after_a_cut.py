@@ -1,0 +1,52 @@
+"""After a memory is cut to fit, the block goes on packing (audit of
+27 Oct 2026: a comment said the next iteration stops; the loop does not).
+
+The behaviour, held: a long first memory is cut back to a sentence boundary,
+the room that cut leaves is filled by the shorter memories after it, whole,
+and the block never passes its budget.
+"""
+from korely_agent.services import context
+from korely_agent.services.context import BYTES_PER_TOKEN
+
+
+def _pack(monkeypatch, contents, budget):
+    hits = [{"id": f"00000000-0000-0000-0000-{i:012d}", "content": c}
+            for i, c in enumerate(contents)]
+    monkeypatch.setattr(context, "_memory_rows", lambda db, h: {})
+    monkeypatch.setattr(context.experiments, "DIALOGUE_ORDER", False)
+    block = context._Block(budget)
+    lines = context._pack_memories(None, block, hits, hits)
+    return block, lines
+
+
+def test_the_loop_goes_on_after_a_truncated_fragment(monkeypatch):
+    long_first = " ".join(f"Sentence number {i} is about the weekend away at the lake." for i in range(30))
+    short = ["Anna likes tea.", "Luca owns a boat."]
+    budget = 200
+    block, lines = _pack(monkeypatch, [long_first] + short, budget)
+    assert lines[0].startswith("- ") and len(lines[0]) < len(long_first)
+    assert lines[0].rstrip().endswith("."), "cut at a sentence boundary"
+    # The shorter memories after the cut one still found room, whole.
+    assert any("Anna likes tea." in line for line in lines[1:]), lines
+    assert block.pack.used <= budget * BYTES_PER_TOKEN
+    assert len(block.sources) == len(lines)
+
+
+def test_a_memory_whose_first_character_passes_the_room_shows_its_date(monkeypatch):
+    """A memory whose first character after its date is one character, as a
+    reader sees it, longer than the room (a letter under 1,200 marks): the
+    cut never splits it, so the line is the date and the ellipsis, and the
+    memory is among the sources (the 1.0.15 CHANGELOG says so)."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    hits = [{"id": "00000000-0000-0000-0000-000000000001",
+             "content": "Z" + "́̀̂̃" * 300}]
+    row = SimpleNamespace(observation=None, event_time=None, relative_times=None,
+                          created_at=datetime(2026, 11, 9, tzinfo=timezone.utc))
+    monkeypatch.setattr(context, "_memory_rows", lambda db, h: {hits[0]["id"]: row})
+    monkeypatch.setattr(context.experiments, "DIALOGUE_ORDER", False)
+    block = context._Block(200)
+    lines = context._pack_memories(None, block, hits, hits)
+    assert lines == ["- [2026-11-09]…"] and len(block.sources) == 1
+    assert block.pack.used <= 200 * BYTES_PER_TOKEN

@@ -1,0 +1,630 @@
+# Honest limits and known issues
+
+## Honest limits
+
+- **Whether a relation holds one value at a time is a model's answer.** The
+  first time the judge meets two facts of a relation (since 0.1.23; before,
+  at the relation's birth), a model is asked whether a subject holds one
+  value of it at a time, of the kind of the two values in conflict, and the
+  majority of three answers is kept in that end user's vocabulary. The judge
+  reads it: a relation kept as "many" never has its old value closed by a new
+  one. Until 0.1.15 it was one answer about the relation in general, and four fresh
+  installs in twenty-one learned that a customer can be on many plans. Measured
+  on 0.1.15: the example at the top closed the old plan in twenty fresh
+  installs out of twenty, and the question was right 120 times in 120 on plan
+  relations and 80 in 80 on relations that do hold many values (`likes`,
+  `uses`, `speaks`, a newsletter). It is not right everywhere: `works_at` a
+  company came back "many" 11 times in 20, so a change of employer may leave
+  both employers true. Look with `include_invalidated=true` when it matters,
+  and close a stale fact yourself with `forget` and its `at`. An install that
+  learned its relations before 0.1.15 keeps the old answers until
+  `manage reclassify-relations` asks again (a dry run; `--apply` writes).
+- **A fact can be closed by one that does not replace it.** On long chats the
+  judge closes some facts that were still true: a rephrasing ("2 younger
+  kids" after "husband and kids"), two facts true together, or one past
+  occurrence of a habit ("went to the beach last weekend" closing "visits the
+  beach"). Measured on LoCoMo with gpt-oss-120b (6-7 Oct 2026): about 2% of the
+  facts ended closed by another (140 of 5,935), and on one conversation none of
+  its 20 closures was a real change. Since 0.1.23, on LoCoMo's first five
+  conversations: 17 facts, against 53 with 0.1.22. What is left is
+  mostly a new state read as replacing an older compatible one, and relations
+  the vocabulary merged though their values are of different kinds (a club,
+  a sponsor and a team in one "signed with"). A closed fact stays readable with
+  `include_invalidated=true`, and since 0.1.23 a memory whose facts were all
+  closed stays in the block, marked as history.
+- **The learned predicate vocabulary is a model's judgement.** Different
+  phrasings of one relation collapse into one only when the model says they
+  are the same; since 0.1.23 no hand-written list of words merges anything,
+  in any language. It is sometimes wrong both ways: reviewing what an install
+  learned on all of LoCoMo, the model separated 337 phrases it had merged at
+  their birth, and some of those separations were themselves wrong.
+  `manage review-vocabulary` asks again (a dry run; `--apply` separates).
+  Contradiction detection still fires through the semantic path when two
+  phrasings stay apart.
+- **A colleague with the same first name can close a fact of the user.** In
+  one end user's memory, "Marco Bianchi eats meat at every meal" can close
+  "the user is vegetarian" when the user is called Marco: the judge cannot
+  always tell a name the user goes by from a namesake's. Declaring every
+  name the person is called by (`POST /v1/users/{id}/names`, `korely init
+  --name` once per name) makes their own facts read as theirs; on our
+  identity bench such wrong closures still happen. A closed
+  fact stays readable with `include_invalidated=true`.
+- **A fact written directly is about the name it is written with.** Since
+  1.0.12 (memory_core 6.5.0 and 6.6.0) a fact posted with `POST /v1/facts`,
+  or a correction whose subject is yours (`PATCH /v1/facts/{id}` with
+  `subject`, or of a fact you wrote), is weighed only against the facts
+  about the same subject, as the store names it after its aliases (a
+  declared name, a rename) and compared with the database's `lower()`: a
+  name spelled with other capitals is the same subject when `lower()` gives
+  one form for both (`ACME`/`acme`); a shorter name, an article, a second
+  space, a different Unicode form (`Straße`/`STRASSE`, full-width letters,
+  `Café` written composed and decomposed, the Greek final sigma of
+  `ΟΔΟΣ`/`οδος`) make another subject. It is weighed as well against
+  the facts about the same two things the other way round. Before, it was
+  also weighed against the facts nearest by meaning of any subject, and on
+  a store of an agent team's own facts (6 Nov 2026) 108 of the 111 closures
+  between two direct facts were between two subjects. What it costs: a
+  person written about by name ("Maria") whose memories are stored under
+  their `user_id` is two subjects until the name is declared
+  (`POST /v1/users/{id}/names`), and a name is declared in one agent
+  namespace: a direct fact written with another `agent_id` does not read
+  it, and the old value stays true beside the new one. The same holds the
+  other way round: a fact read from a memory is weighed against a fact
+  written directly only about the same subject, so "u-42 now works at
+  Globex", read from a memory, leaves "Maria works at Acme" true until the
+  name is declared. Declaring a name reads the facts already written about
+  it as the end user's but does not judge them again: two values written
+  before the declaration stay open side by side. An account declares at
+  most 1,000 names, and only a `user_id` that is itself a name can have one
+  (422 otherwise). A correction that gives only the object or the relation
+  of a fact read from a memory is weighed as that fact was, across the
+  extraction's names; give `subject` to make it yours. Two facts read from
+  memories are weighed as before, across the names the extraction gives one
+  entity. Not measured: the change was tested with a scripted judge only,
+  so how many right closures a real judge loses on a store that mixes
+  direct and extracted facts is not known. A fact closed by mistake stays
+  readable with `include_invalidated=true`; post it again to make it true
+  again.
+- **Writers who share one memory through MCP without an `agent_id` are
+  one writer.** Since 1.0.19 every write over REST needs a `user_id` or an
+  `agent_id`; over MCP, `korely_add` with neither is written in the
+  project's memory with no end user, as before, and the assistant's
+  declared name (`client`) says who wrote it. Several agents that write
+  through MCP that way, each with no `agent_id`, are read as one person,
+  `user`, as every writer without ids was before 1.0.19, and the judge can
+  close one agent's fact with another's: they should each pass their
+  `agent_id`. The client's name is a label, not a namespace: it scopes no
+  read and the judge does not read it.
+- **A program that wrote without ids and now sends a `user_id` has two
+  memories.** A memory stored with no ids before 1.0.19 is not rewritten,
+  and the facts of a write with a `user_id` are not weighed against it: a
+  change written after the upgrade leaves an old fact with no id open until
+  it is corrected or forgotten by hand. The upgrade does not move the old
+  rows to the new id.
+- **An id that names nobody is told by its Unicode general category.**
+  An id made only of whitespace, format characters (category Cf, such as
+  U+200B or U+FEFF) or marks (categories Mn, Mc, Me, with no letter to
+  carry them) is no identity for the write's rule. The fillers and blanks
+  that Unicode files as letters or symbols are not caught: U+3164 HANGUL
+  FILLER (Lo, which Unicode lists as default-ignorable in a data file Python
+  does not carry) and U+2800 BRAILLE PATTERN BLANK (So) count as an
+  identity. The engine reads ids by its own rule: an agent id is blank when
+  only whitespace is left (`memory_core/owner.agent_of`), and any `user_id`
+  is an end user; an id the write's rule refuses never reaches it alone.
+- **In a memory with no `user_id`, two spellings of one thing are two
+  subjects.** Since 1.0.13 (memory_core 6.7.0) a fact of a memory
+  written with an `agent_id` and no `user_id` is weighed only against the
+  facts about the same subject, as the store names it after the aliases of
+  the agent that writes and compared with the database's `lower()`, and
+  against the facts about the same two things the other way round. Before,
+  it was also weighed against the ten facts nearest by meaning of any
+  subject: on the memory of our own team of agents (422 facts, 7 Nov 2026)
+  21 of 32 closures were wrong, and replayed with the same verdicts of the
+  judge (no model called: an estimate) the new rule keeps 4 of them. What
+  it costs: "Cloud", "Korely Cloud" and "the Korely Cloud" are three
+  subjects until an alias unites them in the namespace of the agent that
+  writes (`POST /admin/aliases` with its `agent_id`), so "Korely Cloud runs
+  version 1.0.12" leaves "Cloud has version 1.0.11" true. On that memory 7
+  of the 8 right closures were between two subjects (4 of them between two
+  spellings of the Cloud), and they are lost with the wrong ones. The rule
+  holds both ways. Since 1.0.19 (memory_core 6.9.0) it holds for every
+  memory with no `user_id`, one whose writes carried no ids included, and a
+  fact meets the facts of its entity in either role: their subject is its
+  subject, their object is its subject, or their subject is its object
+  ("Acme employs user", then "user works at Globex", still meet); two facts
+  that only share an object do not. With no end user the store cannot know
+  the memory is one person's. Measured on our team's memory written with no
+  ids (12 Nov 2026, Gemini 3.1 Flash-Lite, the extraction recorded once and
+  replayed, the judge asked again in three runs per version, every closure
+  read on its two memories): wrong closures 19 of 41 before and 12 of 30
+  after (none between two subjects, 7 before); outdated facts closed by the
+  newer fact of the same subject 14 before and 18 after; outdated facts
+  closed by a fact of another subject, right by chance, 7 before and 0
+  after, so outdated facts closed in all 21 before and 18 after. The 3 left
+  open are one outdated version that no fact of its own subject says
+  changed. Without ids the first person is stored as the subject "user", in
+  every writer's memory: two rules of two writers can still close each other
+  there (9 of the 12 wrong closures after; with an `agent_id` the first
+  person is the agent and there were none), and a name a writer goes by is
+  another subject until an operator declares it (`POST /admin/aliases`
+  with `alias` the name, `canonical` "user", and no `user_id` nor
+  `agent_id`). An `agent_id` that is empty or only whitespace is no agent
+  for the extraction, which frames the memory by it; the database applies
+  that rule with `btrim`, which removes characters in a UTF8 database and
+  bytes in a SQL_ASCII one, where an `agent_id` written with characters
+  other than ASCII may be framed differently. What stays:
+  two facts of one subject that are true together ("the repository is
+  private", "its pushes are suspended") can still close each other, since
+  the judge reads them as a change. Not
+  measured with a real judge: the facts of one subject now shown in place
+  of the others (197 pairs on that memory) were never judged.
+- **One thing named in two languages is two things, unless the same-object
+  question is on.** "lives in Italia" and "lives in Italy" are stored with
+  two objects: the extraction keeps the memory's own words, and the store
+  learns that two names are one only when a memory says so, as a rename, or
+  when an operator declares it (`POST /admin/aliases`). Since memory_core
+  6.1.0 the store can ask the writer of the project's region, for every
+  object a write names that the end user's memory does not name yet,
+  whether it is the same thing as one of the memory's open objects in the
+  same relation family whose facts read alike; it is off
+  (`services/facts/objects.SAME_OBJECT`). The writer describes each name in
+  its context, then answers twice, framed two ways, and two "same" write a
+  link: no fact changes, the reads show the two as one ("Italia (written:
+  Italy)"), and `DELETE /admin/object-links/{id}` puts the memory back
+  exactly as it was. A link is read only in the relation family it was
+  decided in: "Florence" linked to "Firenze" among the places leaves an
+  aunt called Florence as she was written, and an employer called Paris
+  is not the city. People are never asked (a nickname is not a
+  translation), nor a name with a comma or over five words ("Washington,
+  D.C."), and a name the memory already holds is never asked again: within
+  one family, the same written name is one object whatever it means
+  ("Paris" the city and a place called Paris in Texas), on or off. On our bench of
+  30 Oct 2026 (138 hard negatives with no disambiguator in their own
+  sentence: exonyms, New-World homonyms, a company and its parent or
+  brand, a place and what contains it), Gemini 3.1 Flash-Lite united 1
+  wrongly (95% interval 0.1% to 4.0%) and gpt-oss-120b on Scaleway 0 (0% to
+  2.7%), but 1 of 24 older negatives; both missed 1 or 2 of 42 true pairs.
+  `manage review-objects` asks the question for the objects already stored,
+  a dry run to a file and then `--apply` of exactly that file. Until two
+  names are one, a search finds both by meaning, and whether a later fact
+  about one closes the other is left to the judge reading both: a link
+  changes neither what is written nor what the judge reads. Forgetting or
+  erasing either memory of a link takes the link, and its two names are
+  then two objects for good: the one that stays was decided when it came,
+  and is not asked again. Not measured yet, and needed before it goes on:
+  a bench held out from the one the prompts were written on (the 30 Oct
+  numbers are in-sample); the second reading reads the same descriptions
+  as the first, not the contexts alone; whether the contradiction judge
+  closes "lives in Italia" when "lives in Italy" arrives (the bench asks
+  the question directly, not through a write); and a way to turn it on for
+  one project at a time.
+- **Each end user learns their own relation names.** The vocabulary is one
+  per end user of a project, so that nothing of one end user (a value, a
+  vote, a phrase) shapes how another's facts are read or judged. The price:
+  two end users can store the same relation under two names (`works_at`,
+  `employed_by`), and each end user's first writes ask the model about
+  relations another end user already taught. `GET /v1/facts?predicate=`
+  resolves the phrase in each end user's vocabulary.
+- **A rename reaches the past.** When the store learns that something has a
+  new name (an alias: made by itself from a memory saying something was
+  renamed, by an operator with `POST /admin/aliases`, or by a key that
+  declares an end user's name with `POST /v1/users/{id}/names`), every fact
+  of that end user in that project and agent namespace takes the new
+  canonical name, closed facts included, and two open facts that now say the
+  same thing become one: the older row stays and the newer is deleted. A
+  plan that meets the same thing done is not merged: it closes where the
+  fact begins and stays in the history. Removing the alias
+  (`DELETE /admin/aliases/{id}`) gives every fact back the names its words
+  give, and does not split what it merged: the deleted row and the closed
+  plan stay as they are.
+  A link between two names judged one thing (above) is not an alias: it
+  changes no fact, and its removal gives back exactly what was there.
+  `manage review-vocabulary --apply` moves the facts of a phrase it
+  separates to their own relation the same way. The dates stay, and
+  `subject` and `object` keep the words as written; but `as_of` on an earlier
+  date answers with today's `predicate`, `subject_canonical` and
+  `object_canonical`, and with one row where there were two.
+- **Extraction quality is the model's.** Facts are mined by an LLM. It invents
+  predicates, it misses things, and it costs money per write. No read calls
+  that model: a search and a context compute one vector of the question, on
+  this machine with the default `EMBEDDING_PROVIDER=local` and billed to the
+  Google key with `gemini`, and every other read is SQL.
+- **An agent's memory with no `user_id` is read with prompts not yet
+  measured with a real model.** Since 1.0.12 a memory written with an
+  `agent_id` and no `user_id` is told it belongs to no end user: its subject
+  is what the text names, its first person is that agent, and a rule in
+  force is asked as current (see the CHANGELOG). Up to 1.0.11, on the 58
+  memories of our own team of agents, 74 of 168 facts were right and none
+  of the 48 with `user` as their subject or object was. The new prompts are
+  tested with a scripted model only: how many facts a real writer gets
+  right with them is not measured yet. A memory with neither a `user_id`
+  nor an `agent_id` (since 1.0.19 only an assistant's over MCP, or one
+  stored before) is read as in 1.0.11, as the memory of an end user named
+  "user": a team whose agents write over MCP without their `agent_id` keeps
+  the `user` facts described above. The new tense rule (a procedure, a rule in force,
+  the lasting result of an approval are current) is asked only of an
+  agent's memory with no `user_id`; every other memory keeps the rule of
+  before.
+- **A change told implicitly or in the past tense can leave the old value
+  open.** Found on 31 Oct 2026 in a real agent environment (Hermes, engine
+  6.1.1): "Tom lives in Berlin and works at a bank", then "Tom moved to Munich
+  and joined a startup", left Berlin and the bank open, with Munich and the
+  startup stored as already finished; the same in Italian ("si è trasferito a
+  Milano"). A change told as "now I live in Lisbon" works. The same end user
+  can also appear as two subjects (the name in the text and the `user_id`), and
+  "te verde" and "tè verde" are two things. 1.0.3 fixed one cause of it for a
+  gpt-oss-120b writer chosen on the Models page (the Cloud's European one
+  among them), which until then did not get the extraction rules measured
+  for it (see the CHANGELOG). Up to 1.0.7 those rules went to any writer
+  with `gpt-oss` in its model name. From the release after 1.0.7 they go to
+  a writer whose model name names gpt-oss-120b, whichever host serves it and
+  however it spells it (`gpt-oss-120b` on Scaleway and OVHcloud,
+  `openai/gpt-oss-120b:nitro` on OpenRouter, `gpt-oss:120b` on Ollama,
+  whatever the letter case). The name is all the product sees, so a
+  fine-tune named after those weights (`...-gpt-oss-120b-finetuned`) gets
+  them too; another gpt-oss (gpt-oss-20b, `gpt-oss-safeguard-120b`), or a
+  name that does not say the size (a model served as `gpt-oss`), writes
+  without them, as every writer they were not measured on. With them,
+  in a bench of ours that is not part of
+  this release (the 14 hardest change cases, three runs each, the real writer,
+  one session), the changes that ended right went from 0 of 33 to 7 of 33: a
+  small sample, better and not solved. Until it is, an agent that knows a fact
+  ended can close it itself (`korely_correct_fact`).
+- **A fact true again after a deletion does not see a contradiction told in
+  another relation.** Deleting the memory that closed a fact gives the fact
+  back unless something open still says otherwise of the same subject, in the
+  fact's relation or in the relation of what closed it ([Time](time.md)). No
+  model is asked on a deletion, so a value filed under a third relation is
+  not read as one: "I live in Paris", "now I live in Zanzibar", and Rome
+  stored under a relation of its own ("relocated to"); forgetting the
+  Zanzibar memory gives Paris back beside Rome, where the judge, on a write,
+  would have weighed the two. Close the stale one yourself with `forget` and
+  its `at` (`korely_correct_fact` over MCP).
+- **On a deletion, one value under two names in two agents is two values.**
+  A deletion compares names as the store holds them, and a name is resolved
+  in the memory of its own agent (an alias is a statement of one agent
+  namespace). Paris told to agents a and b, and known to b as "Parigi" by
+  an alias of b's own: deleting the memory that closed both gives back the
+  copy that began earlier (its `valid_from`: the memory's `timestamp`, else
+  the date its text states, else when it arrived), and that open copy keeps
+  the other closed, as another value would
+  ([Time](time.md)). No model is asked on a deletion, so in
+  doubt the copy stays closed, as history.
+- **A new value closes only the copies its judge reads.** A write weighs a
+  bounded set of earlier facts: the ten newest of the same subject and
+  relation, and the ten nearest by meaning (`memory_core/candidates.py`;
+  for a fact written directly or a correction, the ten nearest by meaning
+  about the same subject, and a fact written directly is among another
+  fact's nearest only about that fact's subject; since 1.0.13 the same for
+  a fact of an agent's memory with no `user_id`).
+  A value told to more agents of one end user than that is closed only in
+  the copies read: in a test with Paris told to 25 agents, "now I live in
+  Zanzibar" closed 10 and left 15 open beside it. Deleting that memory gives
+  back the 10 it closed, and `facts_reopened` says 10. Close the others
+  yourself with `forget` and its `at` (`korely_correct_fact` over MCP).
+- **A fact whose end was brought earlier still points at what was to
+  replace it.** A fact the judge closed on a day still ahead, and that you
+  forget or post in the past tense, or a memory says is over, or an edit
+  takes away, before that day, ends where it was ended, and since 1.0.14 a
+  deletion of what was to replace it no longer gives it back while that
+  word stands (see the CHANGELOG). Its row keeps `invalidated_by`, the fact
+  that was to begin on that day: `GET /v1/facts` with
+  `include_invalidated=true` shows it, so the dashboard calls the fact
+  superseded rather than ended; a correction of it answers 409
+  `fact_not_current` naming that fact as the one to correct; and when a
+  memory's statement brought the end earlier, its `fact.invalidated`
+  webhook names that fact too (a forget's names none). Read the dates:
+  `invalid_at` is when the fact ended, whatever `invalidated_by` names.
+- **Deleting the memory that said a fact was over gives it back only when
+  nothing else closes it.** "I live in Paris", then "I no longer live in
+  Paris": deleting the second memory gives Paris back (since 1.0.14). When
+  the judge had also named a value for Paris on a later day (Zanzibar from
+  tomorrow) and that value still stands, deleting the memory that said
+  Paris was over gives nothing back, and Paris stays closed from the end
+  that memory gave it, also on the days before Zanzibar begins; deleting
+  Zanzibar's memory after it gives Paris back from tomorrow. Post the fact
+  again (`POST /v1/facts`) to make it true sooner. A fact the judgement of
+  that statement closed ("I love Paris", the same two entities) follows
+  Paris: it comes back only when Paris does, and stays closed while Paris
+  does. One order keeps it closed for good (measured on 1.0.14-dev, 10 Nov
+  2026): when two memories say Paris is over and only the first one's
+  judgement closed "I love Paris", deleting the first and then the second
+  gives Paris back but not "I love Paris"; deleting them in the other order
+  gives both back. Post it again (`POST /v1/facts`) to make it true.
+- **The facts ended in place before 1.0.14 carry no record of who ended
+  them.** A deletion knows who ended a fact in place from what that ending
+  wrote when it happened: a memory's past statement or an edit, since
+  1.0.14, records the memory (`agent_fact_ended_by`, every memory that says
+  it); a forget or a correction by hand has written its record since 0.1.1,
+  and a past fact posted by hand writes one of its own (scope `past`) since
+  1.0.14.
+  Nothing guesses it for
+  the rows ended earlier. So a fact a memory said was over, or an edit took
+  away, before the day the judge had closed it at, in 1.0.13 or earlier,
+  reads as until 1.0.13: deleting the memory of the value dated ahead gives
+  it back while the memory that said it was over is live; and deleting the
+  memory that said it was over gives it back no more than in 1.0.13. The
+  same for a past fact posted by hand before 1.0.14. Forget the fact by hand
+  (`POST /v1/facts/{id}/forget`) to make it your word.
+- **A forget with an `at` ahead loses that date when the value that closed
+  the fact sooner goes.** Forget Paris with an `at` five days ahead, then
+  write "From <tomorrow> I live in Zanzibar": the judge closes Paris
+  tomorrow, sooner than your date. Delete Zanzibar's memory and Paris
+  stays closed from tomorrow, not until the day you gave: a forget is your
+  word and is never given back, and its record keeps neither the `at` nor
+  the end it moved (until 1.0.13 Paris came back true for good). Post Paris
+  again from tomorrow (`POST /v1/facts` with `valid_from`) and forget it
+  with your `at`.
+- **A value posted by hand and then forgotten by hand keeps closed what it
+  closed.** "I live in Paris", then Zanzibar posted with `POST /v1/facts`,
+  which closes Paris; forget Zanzibar (`POST /v1/facts/{id}/forget`): Paris
+  stays closed, as it always has, since a forget says Zanzibar was true
+  until then. Deleting a memory that also said Paris was over ("I used to
+  live in Paris") does not give it back either, although since 1.0.14 such
+  a deletion gives back a fact whose closer was retracted with its
+  memories: a closer with no memory is never read as retracted (a design
+  choice, kept by a test). Post Paris again to make it true.
+- **How the context block splits its room between facts and memories is not
+  measured for quality.** `GET /v1/context` pays the reader note (723 bytes,
+  from 400 tokens) out of both shares (the part of the token budget given to
+  facts and the part given to memories) and, with no memory to show, gives the
+  facts the whole room (see the CHANGELOG). We measured what goes in the block
+  at each budget, in bytes and counts; no benchmark has read the new blocks
+  and graded the answers. The two benchmark scripts ask for 4,000 tokens
+  (LongMemEval) and 2,000 per speaker (LoCoMo). For facts of ordinary length
+  the block should be the same as before there, but that is arithmetic on
+  those budgets, not a rerun. At 800 tokens, the default, the block can hold
+  fewer memories than before.
+- **A search of the facts and the memories together is not measured for
+  quality.** `types: ["memories", "facts"]` on `POST /v1/memories/search`
+  and `korely_search` (since 1.0.13) merges the two rankings by rank, an
+  alternation in which a memory comes first at equal rank, because how a
+  fact's cosine compares with a memory's for the same question was not
+  measured: the order says nothing of which kind answers better, no
+  benchmark has graded answers read from it, and with `limit: 1` the best
+  memory wins however close the best fact is. The facts are ranked by
+  meaning alone, not by the context block's recency weight, so a fact
+  confirmed yesterday and one a year old are ordered by how close they are
+  to the question, and they have no `min_score` of their own (a floor with
+  the facts is a 422). Tested with scripted vectors only.
+- **The SDKs do not search the facts or the whole text yet.** In
+  korely-memory (Python 0.1.28, JavaScript 0.1.17), Python's `search()`
+  takes a fixed list of arguments, none of them `types` or `full_text`, and
+  its `SearchHit` keeps only the six fields of 1.0.12, so `type`, `content`
+  and `fact` are dropped from what it returns; JavaScript's `search()`
+  refuses an option it does not know, `types` and `full_text` among them.
+  Until they are updated, call `POST /v1/memories/search` directly, or the
+  MCP's `korely_search`.
+- **The model's usage is the account's, not a project's.** A call to the
+  model is recorded with its agent, its stage and its tokens, not with its
+  project, so `/admin/usage`, the dashboard's Usage page and the model's
+  card and sidebar line count every project together, whichever project the
+  switcher shows, and say "account". The memories, facts, agents, requests
+  and audit trail on the dashboard follow the switcher.
+- **Windows is tested only on Windows Server 2022.** Korely was built from
+  source, started, written to and searched on Windows Server 2022 with Docker
+  Engine inside WSL2 (31 Oct 2026, version 1.0.2). Windows 10 and 11 with Docker
+  Desktop use the same WSL2 and are not tested yet, and neither are the
+  installer and an upgrade from an earlier version there.
+- **More than one process needs sticky MCP sessions.** Two processes on one
+  Postgres, both with their worker, took 2,000 memories at once: each memory
+  got its vector, reached the writer once and sent its webhook once, with no
+  error (`scripts/two_processes.sh`, 30 Oct 2026; run it on your machine, no
+  key needed). The job queues and the locks are in Postgres, so any process
+  can take any request; an MCP session lives in the process that opened it,
+  so a load balancer in front must keep each MCP client on one process.
+  Thirty agents of one account on the same two processes, 15 on REST and 15
+  on MCP sessions, each wrote 20 memories and read 20 times, with the
+  client's retries off: 600 of 600 writes stored once, every one reaching the
+  writer once, 600 of 600 reads answered, no search refused as busy, no
+  error in either log, in 26 seconds on a laptop with the writer faked;
+  reads p50 0.6 s, p95 1.6 s, slowest 2.2 s, because a burst waits for its
+  vectors (below) (`scripts/concurrent_agents.sh`, 31 Oct 2026, no key
+  needed). More than two processes, or more than one machine, has not been
+  measured.
+- **A twelve-hour run held, and forty-eight hours are not measured.** One API
+  process and one Postgres on a 4-CPU, 8 GB server, 50 end users, one memory
+  written and then searched and read as a context about every 1.2 seconds
+  (36,027 memories and as many of each read in 12.2 hours), with the writer
+  faked, so it measures the process, the queues and the disk and not the
+  facts, and the API restarted once at the twelfth hour (`scripts/soak.sh`,
+  1 Nov 2026, no key needed). The API's memory stayed flat: 591 MiB after
+  the warm-up, 585 MiB at the end, 616 MiB at most (and back to its usual
+  size minutes after the restart). Not one line of its log was an error,
+  no memory was left waiting, and 5 requests failed around the restart. The
+  database grew from 9 to 467 MiB, about 13 KB a memory with its vector, which
+  is about 900 MiB a day at that pace; with facts written it grows more, and
+  that was not measured. Hours of load on several processes or machines, and
+  a database of millions of memories, are not measured either.
+- **A burst waits for its vectors.** The local embedder computes one vector
+  at a time per process, and an account has only a few places there at once
+  in each process (`core/threads.CALLS_PER_ACCOUNT`, four), shared by its
+  REST and MCP calls; past them a search or a context waits its turn (at most 20 s, then
+  503 `search_unavailable` with `Retry-After`), and a memory is stored
+  without its vector and the worker computes it later, and until then a
+  search does not find it. In the run above, on a laptop, one account sent
+  2,000 memories in about 20 seconds, 32 at a time, and the last vector came
+  about nine minutes later.
+- **Agent notices tell at the next context block, and only there.** An
+  agent learns of a change when it next asks for its context block with
+  `reader`; nothing is pushed, and `GET /v1/facts` keeps marks but tells
+  nothing (a door of its own for every change waiting is not there yet). A
+  change is told at most once, at most 3 a block (the rest are counted in
+  `changed_more`), whether the agent reads the section or not, and an
+  answer that fails after reserving them (the response lost on its way, an
+  error after the block was built) loses them. The section takes room only
+  after the known facts, from the memories' share, at most half of it when
+  memories follow and never what the first memory needs to be shown (its
+  heading and its shortest fragment): so with `reader` the block has the
+  same known facts and the same `stable`, a block with memories keeps one,
+  and a block that its known facts fill, with no memory, has no room for
+  changes (they wait for a larger `token_budget`). So in a block with
+  memories a small budget can tell nothing where a smaller one did, and
+  where depends on the facts: in the tests' block of an end user (four short
+  facts, three memories, two short changes), from 155 to 185 tokens the
+  first memory fits and keeps its floor, and the room left for the section
+  (94 bytes at 175 tokens) is less than the 148 a short change takes on the
+  first line; below 155 no memory fits and the changes take the room; from
+  190 tokens one short change is told, from 220 two (measured by the review
+  in steps of 5 tokens); with the facts of 25 changes in the block the empty
+  band was 175 to 225. It looks at the 20 newest changes and tells the
+  newest that fit, a change too long for the room written short (each fact
+  cut with an ellipsis) in its share of the room, the changes that wait
+  after it counted, those not looked at yet too; one that does not fit its
+  share waits while the others are packed and is then told in what they
+  leave, alone if need be: a long change takes at most its share while
+  others wait behind it. When, those packed, a place is free, a change of
+  the 20 was passed over and the room left holds the smallest line a change
+  can take (one that no longer holds, without its words: 42 bytes, 33 more
+  for the heading on the first line), the block asks once for the next ones,
+  up to 200 in all, and packs again: so a change that cannot be told there,
+  for its words or its length, keeps out no short change the block has room
+  for, as long as fewer than 200 such changes stand ahead of it; an older
+  one waits as long as 200 stand ahead of it, counted in `changed_more`.
+  That lookup has its cost: a queue made so, on purpose or not, asks for it
+  at every read for as long as it stays so, and the review measured 33 SQL
+  statements instead of 26 and 139 ms of CPU to pack 200 changes, at most
+  one lookup more of at most 200 a read. One that does not fit even alone
+  waits for a block with room: written short, a change needs 126 bytes (135
+  when it was stated by a caller or read from a memory, 85 and 94 when it no
+  longer holds), plus one for its line break, 33 on the section's first line
+  for the heading. Newest first has its cost: a writer that changes three or
+  more facts the reader had before every read keeps an older change out for
+  as long as it goes on (counted in `changed_more`; in the review's probe,
+  at 300 and 800 tokens, never told in 12 reads with three new short changes
+  before each, told at the first read with one or two; at 400 tokens that
+  block had no room for a change at all, the empty band above). Two facts
+  that begin the same are each cut to show where they differ (the beginning,
+  an ellipsis, the part that differs), and a change where not even that fits
+  is not told short, so it waits for a block with room, keeping none out.
+  Every cut of the block, of a memory as of a change, falls between two
+  characters as a reader sees them (Unicode's extended grapheme clusters),
+  except after the few Prepend signs of UAX #29 (U+0600 to U+0605 and some
+  others), which the rule does not read.
+  It is the reader's whatever the block's `agent_id`: an agent that reads
+  several namespaces under one name is told the changes of all of them in
+  any of its blocks (to keep them apart, read under two names).
+  It does not follow `exclude_sessions`: what holds now may be a fact that
+  only work sessions state. A read that failed (the search down and
+  nothing to show) tells no change. A notice is
+  as right as the closure it tells: in an agent's memory with no end user
+  only the explicit ones (corrected, forgotten, stated by a caller) are
+  told unless the read asks for `changes=all`. A fact ended in place by a
+  past statement reads "read from a memory" whoever said it, a caller's own
+  past statement (`POST /v1/facts` with `tense: past`) included: the store
+  records that one, so that no deletion gives the fact back, but a notice
+  does not tell it apart from a memory's, so such a change is never among
+  the explicit ones. A correction or a forget whose transaction began before
+  the fact itself was written (a race of moments: the end is then recorded
+  at the fact's own `created_at`) reads the same way, never as explicit. A chain of what replaced a fact that passes through a fact
+  the key may not read says "no longer true", even when a later fact of the
+  chain is the key's. A fact true again in another row (given back after a
+  deletion, or the same fact told again) is no change while that row is
+  true; if that row ends later, a reader handed only the first is told it
+  no longer holds, without what replaced it, and a reader handed both is
+  told it twice in one block, once with what replaced it and once as no
+  longer true (measured on 1.0.15-dev, 10 Nov 2026). A fact whose memory was
+  forgotten is told without its words. A change of a fact written after
+  extraction is known only once
+  extraction has run. The reader is the name the
+  caller gives, not checked against the key: with one key for several
+  agents, or several keys in one project, one agent can read under
+  another's name, leave marks under it and be told the changes waiting for
+  that agent, which is then not told them (never seeing more than its own
+  key). A name that only ever read is reached by `DELETE /v1/agents/{id}`
+  but is not listed by `GET /v1/agents`, which lists the namespaces
+  written under. Only facts are marked, never memories; only the context block and
+  `GET /v1/facts` (and their MCP twins) mark, and only a read of what is
+  true now. The marks of a project deleted without erasing it go with it,
+  although its facts move to the Default project.
+- **What a mark costs, and what it waits for.** A mark is written in a
+  session of its own before the answer is sent: one row per fact handed
+  over, about 322 bytes each, indexes included (8,000 rows measured). Measured on a laptop
+  (Docker, in process, no network, 8 Nov 2026), 200 reads with `reader` and
+  200 without: with `GET /v1/facts` handing over 40 facts it added 1 to 2
+  ms at the median and 0 to 4 ms at the 95th percentile with the machine
+  lightly loaded, and 5 to 6 ms at the 95th percentile with it busy; with
+  200 facts a read, the most a page holds, on the busy machine, the median
+  went from 8.5 to 13.4 ms and the 95th percentile from 12.6 to 31.3 ms.
+  The context block hands over at most 10 facts. Not measured on a server.
+  A mark waits at most 0.2 s for a lock another transaction holds on its
+  rows (an erasure of the same facts, a deletion of the project or of a
+  fact, a late vector judgement, a lock on the table) and 1 s for its
+  statement, then it gives way: the read is answered all the same,
+  `/health` counts it under `records.read_marks.gave_way` and stays `ok`. A
+  fact another transaction holds longer than that stays unmarked, alone:
+  the read's other facts are marked first, at once (tested with these
+  deadlines: a deletion held for a second leaves three facts of four
+  marked, and the mark returns in under 0.8 s). The context block's look at
+  the changes and its reservation of the ones it shows wait the same 0.2 s:
+  under a lock on the marks' table (a migration) a block with `reader`
+  comes without the section (in under a second in the tests),
+  `changed_more` null, and the changes wait for the next read.
+- **What telling the changes costs, measured.** Four queries, whatever the
+  number of changes asked: the changes with their origins and their count,
+  every chain of what replaced them at once (walked by the database,
+  however long), the facts' rows, and their memories (whose words may be
+  told); a block that shows changes adds the one that reserves them. Measured on a laptop
+  (Docker, in process, no model, 8 Nov 2026, the two versions one after the
+  other on the same machine):
+  - 10,000 facts of one end user, 20 readers each with a mark on every fact
+    (200,000 marks), 1,000 of those facts ended since, every one a change
+    still to tell each reader: the first 3 changes and the count of the
+    other 997 took 20 ms at the median and 90 ms at the 95th percentile
+    (144 and 200 before this version's review), 200 changes 38 and 88 ms
+    (243 and 285 before; 377 and 522 in the first measure, on a busier
+    machine). In that store `GET /v1/context` with `reader` took 39 ms at
+    the median and 50 ms at the 95th percentile against 25 and 31 without
+    (122 and 133 with `reader` before), and `GET /v1/facts` 16 against 13.
+  - 200 changes, each down a chain of 61 facts that replaced one another:
+    158 ms at the median (2.3 s before, and every one of the 200 said "no
+    longer true" though a value held at the end of each chain: chains were
+    followed 50 links at most).
+  - 3 changes waiting for a reader among its 10,000 marks: 14 ms at the
+    median and 18 ms at the 95th percentile (82 and 159 before); with 5,000
+    forget records in the account, 19 and 32 ms (667 and 767 before: the
+    records were read once for each change).
+  Not measured on a server, nor with more than one request at a time.
+- **No ceiling on the readers of a project.** Every name a caller gives
+  is a reader of its own, and each keeps its own row for every fact it
+  read, so a project read under many names keeps that many rows per fact,
+  until they are 90 days old. A ceiling is not decided yet.
+- **Declining an app's connection still sends the browser to the app.**
+  `/authorize` redirects only to the consent page, and an app's address
+  is reached only from there, once a person signed in and saw its host:
+  approving or declining both send the browser back to that address (with
+  `error=access_denied` when declined), as OAuth expects. Any https address
+  can be registered, so the consent page's host line is what tells a
+  person where they are sent (RFC 9700 section 4.11.2 leaves it to them).
+
+## Known issues in this version
+
+The review before this version found these and left them for the
+next patch. None of them shows one account's data to another, loses data or
+keeps an erased person's data; each one delays work or costs time on an
+install shared by many accounts. A single-account install meets almost none.
+
+- **The workers' turns between accounts are not fair in every case.** The
+  facts drain orders the accounts it serves by the event time a client
+  sends, so backdated imports go first; the vector drain serves the 50
+  accounts with the oldest due rows per pass; the webhook round can skip the
+  same few accounts while others have a backlog and their receivers are slow.
+  Work is delayed, never lost.
+- **An account's own long erasure can pause the workers.** While a project
+  erasure with a very large trail runs, the batch, vector and facts workers
+  can wait on the rows it holds, for every account, until it commits; the
+  trail pass of a project erasure costs ids times trail rows.
+- **Revoked API keys are kept.** At most 100 live keys, but revoked ones are
+  never deleted, and a project erasure reads all of the account's key rows.
+- **Webhook name lookups share one pool.** Eight accounts whose endpoints'
+  names resolve slowly can make other accounts' webhook checks time out
+  while it lasts.
+- **The Markdown export** (the optional export directory) can be held by one
+  account that keeps asking for it, delaying the others' exports.
+- **Old metadata with a malformed character.** A memory stored before 0.1.41
+  whose `metadata` holds a lone UTF-16 surrogate makes a metadata-filtered
+  search of that account answer 500. Such values are refused at every door
+  since this version.
+- **A restore's replay can file one erasure twice.** If an error comes after
+  a repeated erasure has committed, its new record stays next to the
+  original. The erasure itself is complete; the extra record is harmless.
