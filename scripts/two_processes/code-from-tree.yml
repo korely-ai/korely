@@ -1,0 +1,11 @@
+# With KORELY_CODE_FROM_TREE=1: the tree's code over the image's, to try a
+# change without building an image (the image's dependencies must match).
+x-tree: &tree
+  volumes:
+    - ${KORELY_TREE}/korely_agent:/app/korely_agent:ro
+    - ${KORELY_TREE}/alembic:/app/alembic:ro
+    - ${KORELY_TREE}/alembic/alembic.ini:/app/alembic.ini:ro
+    - ${KORELY_TREE}/VERSION:/app/VERSION:ro
+services:
+  api1: *tree
+  api2: *tree

@@ -1,0 +1,14 @@
+# Test and development image. The shipped artifact is Dockerfile; this one only
+# adds the test dependencies so `make test` is one command on any machine and
+# does not depend on which Python happens to be installed on the host.
+#
+# It installs the generated dev lock, never a requirements file: the product's
+# packages at exactly the versions and hashes the product image installs, plus
+# the test tools (how a lock is made: the top of requirements.txt). The Makefile
+# names this image after the lock's contents, so a changed lock is a new image
+# rather than an old one reused; tests/test_requirements_lock.py fails if what
+# is installed here is not the lock.
+FROM python:3.11-slim
+WORKDIR /w
+COPY requirements/requirements-dev.lock.txt ./
+RUN pip install --no-cache-dir -q --require-hashes -r requirements-dev.lock.txt

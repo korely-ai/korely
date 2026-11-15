@@ -1,0 +1,102 @@
+# Reverse proxy and TLS.
+#
+# With DOMAIN set, Caddy obtains and renews a Let's Encrypt certificate on its
+# own: no cron, no certbot, no expiry at 3am eighteen months from now. Without
+# it, the site address falls back to localhost and Caddy issues its own
+# certificate, which is right for a laptop and wrong for anything else.
+#
+# There is no plain-HTTP option here on purpose. This service carries other
+# people's customer data, and an install that is easy to leave unencrypted
+# eventually is.
+#
+# `ACME_CA` exists for the one case that sits between those two: somebody
+# evaluating, who rebuilds the same machine several times in a week. Let's
+# Encrypt allows five certificates per week for the same exact name, and a
+# rebuild that drops the `caddy_data` volume throws away the certificate it
+# already had and asks for another. Five rebuilds and the sixth gets nothing,
+# with no page and no warning: port 80 still redirects to a 443 that has no
+# certificate to offer.
+#
+# Point it at the staging directory and the whole ACME path still runs, on
+# limits that are effectively unreachable. The certificate is untrusted, so a
+# browser objects and `curl` needs `-k`, which is the right trade while
+# evaluating and the wrong one afterwards. Leave it unset in production.
+#
+#   ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	# No proxy is trusted to name the client (see reverse_proxy below);
+	# if one is ever added here, its X-Forwarded-For is read right to left.
+	servers {
+		trusted_proxies_strict
+	}
+	# Caddy's own log (a proxy that cannot reach the API, a certificate)
+	# carries the request too: the same filters as the access log below.
+	log default {
+		output stdout
+		format filter {
+			wrap console
+			request>uri delete
+			resp_headers>Location delete
+			request>headers>X-Korely-Alert-Secret delete
+		}
+	}
+}
+
+{$DOMAIN:localhost} {
+	encode gzip
+
+	# No body past the largest the API takes (/v1/batch, about 75 MB at the
+	# worst its 500 items can be spelled): the API refuses each route's own
+	# ceiling before reading (services/limits.body_cap), and this stops the
+	# rest at the door (audit of 17 Oct 2026).
+	request_body {
+		max_size 80MB
+	}
+
+	# The MCP transport streams; buffering it would make an agent wait for the
+	# whole response before seeing any of it.
+	#
+	# X-Forwarded-For is written, not appended to: the API believes this
+	# Caddy, by its service name (FORWARDED_ALLOW_IPS=caddy, Dockerfile),
+	# and takes the client from the header. An appended header lets the
+	# client choose that address, and with it the login lock, the address
+	# in the LOGIN audit row and the per-network caps (audit of 17 Oct
+	# 2026). With no `trusted_proxies` here, {client_ip} is the address
+	# of the connection itself, and whatever the client sent is dropped:
+	# Caddy's own default too, written out so a later edit cannot lose it.
+	# Behind another proxy (a CDN) add `trusted_proxies` to the global
+	# `servers` block above: `trusted_proxies_strict` makes Caddy read that
+	# proxy's header from the right, so the client's entries never count.
+	reverse_proxy api:8000 {
+		flush_interval -1
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {client_ip}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Every request on stdout with its method, status, timing and host, and
+	# no address: not the path and query (`request>uri`), not the Location of
+	# a redirect (the same path). A path can carry an end user, and cutting it
+	# by segments kept one that was a segment (audit of 27 Oct 2026). The API's own
+	# access line writes each path by its route (main.loggable_path): read
+	# the path there.
+	# Authorization and Cookie Caddy writes as REDACTED itself; the Cloud's
+	# billing alert secret, a header of the request, is dropped.
+	log {
+		output stdout
+		format filter {
+			wrap console
+			request>uri delete
+			resp_headers>Location delete
+			request>headers>X-Korely-Alert-Secret delete
+		}
+	}
+}
