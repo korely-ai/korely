@@ -1,0 +1,20 @@
+# Tests run against real Postgres with pgvector, never SQLite.
+#
+# The codebase this was extracted from tested on SQLite in-memory, which does
+# not apply migrations and does not have the vector type. A migration that
+# referenced a non-existent column passed every test and then crashed
+# production in a boot loop, because the container runs `alembic upgrade` before
+# uvicorn. Testing against the database you actually ship on is the cheap fix.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: korely
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: korely_test
+    ports: ["55433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U korely -d korely_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

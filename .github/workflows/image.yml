@@ -1,0 +1,148 @@
+# The install's image, built once per release and kept in the GitHub
+# Container Registry of the repository that runs this workflow
+# (ghcr.io/<owner>/<repository>, from GITHUB_REPOSITORY): an install pulls it
+# instead of building it on the server (since 2026-10-06).
+#
+# Two images per version, because the image is built with its embedder
+# (README, step 7): `X.Y.Z` carries EmbeddingGemma (about 1.2 GB) and computes
+# the vectors on the customer's machine, the default since 0.1.19, with the
+# notice the Gemma terms ask of every copy; `X.Y.Z-gemini` computes them with
+# Gemini and carries no model. 0.1.18 was named the other way round (`0.1.18`
+# without the model, `0.1.18-local` with it).
+#
+# Each platform is built on a runner of its own architecture, then the two are
+# joined under the release's tags (audit of 17 Oct 2026). Built together on
+# one amd64 runner, the arm64 half ran under QEMU: its `pip install` alone took
+# 6 minutes of the 16 of 0.1.39's `local` job (68 seconds natively), and the
+# whole release about 24 billed minutes of the 2,000 a month. GitHub's arm64
+# runners are offered to private repositories since 29 Jan 2026 and count
+# against the same free minutes.
+#
+# No build cache: the `gha` cache this used was written on every run (7 of
+# those 16 minutes) and read by none, zero steps CACHED in 0.1.38, 0.1.39 and
+# 0.1.40, and it held 12.6 GB against the repository's 10 GB, so GitHub was
+# evicting it as fast as it was written.
+#
+# A tag pushed by scripts/release.sh builds it. `workflow_dispatch` builds a
+# tag already pushed (the first was v0.1.18).
+name: image
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to build, for example v0.1.18"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        embedder: [gemini, local]
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # The tag's VERSION, never a -dev one: scripts/release.sh writes the
+      # number before it tags, and the image says the same number.
+      - name: The version this tag promises
+        id: version
+        run: |
+          v="$(cat VERSION)"
+          case "$v" in
+            *-dev|"") echo "VERSION says '$v': this is not a release" >&2; exit 1 ;;
+          esac
+          suffix=""
+          [ "${{ matrix.embedder }}" = gemini ] && suffix="-gemini"
+          echo "tag=ghcr.io/${GITHUB_REPOSITORY,,}:${v}${suffix}-${{ matrix.platform }}" >> "$GITHUB_OUTPUT"
+
+      # The runner is the platform: what reaches the image is what this
+      # machine is, not what an emulator says it is.
+      - name: The runner is the platform it builds
+        run: |
+          case "${{ matrix.platform }}:$(uname -m)" in
+            amd64:x86_64|arm64:aarch64) ;;
+            *) echo "building ${{ matrix.platform }} on $(uname -m)" >&2; exit 1 ;;
+          esac
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One platform per job, under a tag of its own (`X.Y.Z-amd64`,
+      # `X.Y.Z-gemini-arm64`); the job below joins them.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/${{ matrix.platform }}
+          build-args: EMBEDDING_PROVIDER=${{ matrix.embedder }}
+          push: true
+          tags: ${{ steps.version.outputs.tag }}
+
+  # The release's tags, `X.Y.Z` and `latest` (with `-gemini` for the image
+  # without the model), on one manifest list carrying both platforms: what
+  # `docker pull` on either architecture finds, as before.
+  manifest:
+    needs: image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        embedder: [gemini, local]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: The version this tag promises
+        id: version
+        run: |
+          v="$(cat VERSION)"
+          case "$v" in
+            *-dev|"") echo "VERSION says '$v': this is not a release" >&2; exit 1 ;;
+          esac
+          suffix=""
+          [ "${{ matrix.embedder }}" = gemini ] && suffix="-gemini"
+          echo "tag=ghcr.io/${GITHUB_REPOSITORY,,}:${v}${suffix}" >> "$GITHUB_OUTPUT"
+          echo "latest=ghcr.io/${GITHUB_REPOSITORY,,}:latest${suffix}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Both platforms under the release's tags
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          LATEST: ${{ steps.version.outputs.latest }}
+        run: |
+          docker buildx imagetools create -t "$TAG" -t "$LATEST" "$TAG-amd64" "$TAG-arm64"
+          docker buildx imagetools inspect "$TAG" | tee /tmp/manifest.txt
+          for p in linux/amd64 linux/arm64; do
+            grep -q "Platform: *$p\$" /tmp/manifest.txt \
+              || { echo "$TAG has no $p" >&2; exit 1; }
+          done
