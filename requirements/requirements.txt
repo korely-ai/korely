@@ -64,5 +64,5 @@ anyio>=4.0,<4.16
 # the provider on is a rebuild that downloads the weights and nothing else.
 # The weights come only with EMBEDDING_PROVIDER=local (Dockerfile, `model`).
 onnxruntime>=1.30,<1.31
-sentencepiece>=0.2.1,<0.3
+sentencepiece>=0.2.3,<0.3
 numpy>=2.0,<2.5
