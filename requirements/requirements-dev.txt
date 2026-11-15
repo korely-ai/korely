@@ -14,7 +14,7 @@
 # version and hashes (pip-tools' layered requirements).
 -c requirements.lock.txt
 
-pytest>=9,<10
+pytest>=9.2.0,<10
 pyflakes
 # What Starlette's TestClient runs on. Given only httpx it falls back to it and
 # warns on every run ("Using `httpx` with `starlette.testclient` is
