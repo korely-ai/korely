@@ -1,0 +1,183 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    Geist Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/*
+  The element defaults (the border colour every element gets, the page) sit in
+  the base layer. Tailwind v4 puts its utilities in a cascade layer, and a rule
+  outside every layer beats every layered one whatever its specificity: the
+  unlayered `* { border-color }` of the v3 stylesheet overrode each explicit
+  border colour of the panel (the setup cards' `border-white/10` read as the
+  light theme's grey), found comparing the two builds page by page.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Two v3 defaults v4 dropped, kept as the panel was drawn: the grey of a
+     placeholder (v4 makes it half the text colour) and the hand over a
+     button (v4 shows the arrow). */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/*
+  A row's actions that show when the row is hovered or has the focus (a fact's
+  Correct and Forget, a project's Edit, Archive and Delete). They are hidden
+  only where the device can hover, the same condition Tailwind v4 puts on its
+  own `hover:` and `group-hover:` (Media Queries Level 4, the `hover`
+  feature): on a touch screen nothing hovers, and the buttons hidden with a
+  bare `opacity-0` stayed invisible there and still took a tap, so a tap on
+  the empty end of a fact forgot it (pre-tester check of 15 Nov 2026).
+*/
+@utility hover-reveal {
+  @media (hover: hover) {
+    .group:not(:hover):not(:focus-within) & {
+      opacity: 0;
+    }
+  }
+}
+
+/*
+  Design tokens. Light default for a data-dense developer dashboard (the
+  Stripe/Vercel/Mem0 convention for readable tables). The values follow the
+  shadcn variable contract, and the dark palette is the `.dark` block below,
+  switched by a class on <html> (contexts/ThemeContext.tsx).
+*/
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 12%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 12%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 12%;
+
+  /* Korely brand blue (matches the agents marketing accent). */
+  --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 240 5% 96%;
+  --secondary-foreground: 240 10% 12%;
+
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 46%;
+
+  --accent: 240 5% 96%;
+  --accent-foreground: 240 10% 12%;
+
+  /* Red-700: an error says itself in this red on its own tint (the
+     `bg-destructive/10` of every error note), 4.1:1 at red-600 (pre-tester
+     check of 15 Nov 2026); WCAG 2.2, 1.4.3 asks 4.5:1 of text this size. */
+  --destructive: 0 74% 42%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 240 6% 90%;
+  --input: 240 6% 90%;
+  --ring: 221 83% 53%;
+
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: 222 24% 8%;
+  --foreground: 210 17% 92%;
+
+  --card: 222 22% 11%;
+  --card-foreground: 210 17% 92%;
+
+  --popover: 222 22% 11%;
+  --popover-foreground: 210 17% 92%;
+
+  /* The light blue that reads on the dark page (5.1:1 as text) cannot hold
+     white text (3.6:1, WCAG 2.2, 1.4.3 asks 4.5:1): a filled button writes
+     in dark ink on it, as shadcn/ui's blue theme pairs this same blue
+     (217.2 91.2% 59.8%) with 222.2 47.4% 11.2% (pre-tester check of 15 Nov
+     2026). tests/test_the_screen_reads_in_both_themes.py measures the pairs. */
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 47% 11%;
+
+  --secondary: 222 18% 16%;
+  --secondary-foreground: 210 17% 92%;
+
+  --muted: 222 18% 16%;
+  --muted-foreground: 217 11% 60%;
+
+  --accent: 222 18% 16%;
+  --accent-foreground: 210 17% 92%;
+
+  /* Red-400, the red shadcn/ui's v4 dark theme gives its errors: the red of
+     before read 3.3-3.7:1 on the dark error notes; a filled red button
+     writes in the dark ink of the blue one. */
+  --destructive: 0 91% 71%;
+  --destructive-foreground: 222 47% 11%;
+
+  --border: 222 16% 20%;
+  --input: 222 16% 20%;
+  --ring: 217 91% 60%;
+}
+

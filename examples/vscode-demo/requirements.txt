@@ -1,0 +1,1 @@
+korely-memory>=0.1.15
