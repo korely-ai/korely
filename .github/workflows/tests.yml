@@ -1,0 +1,111 @@
+# The test suite on a clean machine (since 2026-10-06). A suite that passes
+# only on the author's laptop is not a test (Makefile).
+#
+# The same commands as on the laptop: the test image built from dev/Dockerfile.dev
+# and the lock, Postgres with pgvector from dev/docker-compose.test.yml, then the
+# whole suite and the migration check; and the dashboard's type check and
+# build, which the image build runs too.
+#
+# Where and when it runs (17 Nov 2026). A public repository's Actions minutes
+# are free; a private repository's are counted, 2,000 a month on GitHub Free,
+# and a run past them waits for the next month. The `python` job runs the
+# whole suite in one process on a two-core runner, 97 minutes on v1.0.30 (100
+# billed with the dashboard's 2, GitHub rounding each job up to the minute),
+# and a release came most days.
+# So the jobs below run
+#
+#   - on every release tag of a public repository, as they always did;
+#   - every Sunday night on the default branch of a private repository, where
+#     a tag skips them (a skipped job bills no minute): scripts/release.sh runs
+#     the whole suite before every tag on the machine that tags it (in 4
+#     processes, then the serial tests, since 13 Nov 2026);
+#   - by hand anywhere (`gh workflow run tests.yml`), for the second check on
+#     another machine whenever one is wanted, before a deploy too.
+#
+# Public or private is read from the event (`github.event.repository.private`,
+# which a push, a schedule and a workflow_dispatch all carry), never from an
+# owner's name: the public copy of this repository holds this same file.
+name: tests
+
+on:
+  # Every night until 14 Oct 2026, then every Monday until 16 Oct, then on
+  # the release tags only, as the month's minutes ran short. Since 17 Nov a
+  # private repository's tag skips the jobs, and its run is Sunday's (the
+  # header).
+  push:
+    tags: ["v*.*.*"]
+  # Sunday, 22:00 UTC; a private repository's run (the jobs' `if`).
+  schedule:
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    # A tag of a public repository, Sunday's run of a private one, a run by
+    # hand anywhere (the header). The same condition on both jobs.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && !github.event.repository.private)
+      || (github.event_name == 'schedule' && github.event.repository.private)
+    runs-on: ubuntu-latest
+    # 30 until 10 Nov 2026: the serial suite took 27 minutes here on v1.0.13
+    # and passed 30 on v1.0.14 (13.5 minutes on the laptop), so the run was
+    # cancelled with nothing failed. 45 until 14 Nov 2026: the larger suite of
+    # v1.0.22, whose load tests run slower on this two-core machine, was at
+    # 32% after 32 minutes here, twice, and was cancelled at 45 with nothing
+    # failed. 120 until 16 Nov 2026: the serial suite of v1.0.30 took 97 of
+    # them (10,402 tests), and every release adds tests. 180 leaves room; the
+    # hosted runner's own limit is 360.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: One version, said the same way everywhere
+        run: |
+          make image
+          docker run --rm -v "$PWD:/w" -w /w -e PYTHONPATH=/w korely-agent-dev:latest \
+            python scripts/check_the_version.py
+
+      # In one process, with no WORKERS: scripts/release.sh runs the suite in
+      # 4 processes before every tag, and this serial run on another machine
+      # is a second check, independent of that one (when it runs: the header).
+      - name: The whole suite, on Postgres with pgvector
+        run: make test-all
+
+      - name: The migrations give the models' schema
+        run: make migrate-check
+
+      - name: Stop the database
+        if: always()
+        run: make db-down
+
+  dashboard:
+    # A tag of a public repository, Sunday's run of a private one, a run by
+    # hand anywhere (the header). The same condition on both jobs.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && !github.event.repository.private)
+      || (github.event_name == 'schedule' && github.event.repository.private)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # What each read sends, run with node (scripts/check_the_reads.mjs).
+      - run: npm test

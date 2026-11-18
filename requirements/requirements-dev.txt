@@ -1,0 +1,29 @@
+# Test dependencies, on top of the product's. Edit by hand, then regenerate the
+# locks with `make lock` (see requirements.txt). The test image installs the
+# generated requirements-dev.lock.txt, never this file.
+#
+# The product's own requirements come first and whole: the suite imports what
+# the product imports, at the versions the product ships. This file used to
+# list them again with ranges of its own (`sqlalchemy>=2` with no ceiling, the
+# range BUG-114 came through), so the tests could pass on versions no release
+# image contained. `google-genai` is the case worth remembering: the image once
+# omitted it, every model call in the tree was unreachable from the suite, and
+# the Gemini client shipped with no request deadline for as long as that lasted.
+-r requirements.txt
+# Everything the tests share with the product is held at the product's
+# version and hashes (pip-tools' layered requirements).
+-c requirements.lock.txt
+
+pytest>=9,<10
+pyflakes
+# What Starlette's TestClient runs on. Given only httpx it falls back to it and
+# warns on every run ("Using `httpx` with `starlette.testclient` is
+# deprecated; install `httpx2` instead"). Tests only: the product's own httpx
+# (webhooks) is in requirements.txt and does not change. Bounded at the next
+# minor, as the top of requirements.txt asks.
+httpx2>=2.13,<2.14
+# The suite in several processes (`make test-all WORKERS=N`): each worker gets
+# a database of its own (tests/conftest.py), and the tests that need the
+# machine to themselves are marked `serial` and run after, in one process.
+# Bounded at the next minor, as the top of requirements.txt asks.
+pytest-xdist>=3.8,<3.9
