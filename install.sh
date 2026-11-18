@@ -81,7 +81,7 @@ c59544d4d37146f1b3ea74f724467ab74af95757bf81be4262fd3b42d0e474fa  .env.example
 # stamped after that by `scripts/stamp_installer.py digest` (the last step
 # release.sh prints). Until then the image is pulled by its tag, with a
 # warning.
-THIS_IMAGE_DIGEST=""
+THIS_IMAGE_DIGEST="sha256:644b47cfa8b3b04da6babffff81a30a0f2c583fdefae7aa14f5b63f5b632bf23"
 
 # The public repository, owner/name, the one name the three addresses below
 # are made of. The image is the one its CI pushes, ghcr.io/<owner>/<repository>
