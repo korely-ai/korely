@@ -1,0 +1,37 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.local
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+backups/
+# What deploy/restore.sh keeps when a restore stops after it began to replace
+# the database: the live database's erasures (pseudonyms, end-user ids) and
+# credentials (password hashes, webhook secrets). People's data, like backups/.
+/erasures-*.json
+/credentials-*.json
+# The Markdown export (FACTS_EXPORT_DIR): people's data, like backups/. Only
+# the directory at the root, where docker-compose.yml mounts it: `facts/`
+# alone also matched korely_agent/services/facts/, and a new module there
+# would never have been committed (2026-10-01).
+/facts/
+examples/time_machine/demo.html
+# What install.sh leaves in a folder it made by fetching this repository: its
+# mark, its ./korely command, and with --save-credentials the login and the key.
+/.korely-install
+/credentials.txt
+/korely
+# Installed, never source. scripts/node_modules (Playwright, for the browser
+# checks) was committed once, 513 files, and shipped inside the product image.
+node_modules/
+.gstack/
+/dist/
+soak-results/
+docs/.obsidian/
+
+# Tables read once at an immutable tag (scripts/check_syscall_numbers.py)
+.cache/

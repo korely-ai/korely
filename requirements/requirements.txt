@@ -1,0 +1,68 @@
+# Runtime dependencies. Short on purpose: every line here is something a client
+# has to accept into their production environment, and something we have to
+# track for advisories.
+#
+# Edit this file by hand, then regenerate the locks:
+#
+#   make lock
+#
+# No image installs this file. The product image installs the GENERATED
+# requirements.lock.txt and the test image requirements-dev.lock.txt, both with
+# every package pinned (transitive ones included) and hashed, in pip's
+# hash-checking mode. A range here says what we accept; the lock says what
+# ships. Before the locks a clean build resolved whatever PyPI had that day, so
+# two installs of the same tag could run different code, and the test image ran
+# older versions than the release image it was vouching for. `make lock` keeps
+# the existing pins; `make lock ARGS="-P fastapi"` moves one package and
+# `make lock ARGS=--upgrade` all of them. tests/test_requirements_lock.py fails
+# while a lock disagrees with this file or with the image it runs in.
+#
+# Every upper bound stops at the next MINOR release of the version the test
+# image runs. A range open up to the next major is a promise made on behalf of
+# releases nobody has run: `sqlalchemy>=2.0,<3` let a clean install pick
+# SQLAlchemy 2.1, which chose a Postgres driver the image does not ship, and the
+# API did not start (BUG-114). A bound moves when `make test-all` has passed on
+# the new version, in the same commit.
+fastapi>=0.115,<0.142
+uvicorn[standard]>=0.32,<0.53
+sqlalchemy>=2.0,<2.1
+alembic>=1.13,<1.20
+psycopg2-binary>=2.9,<2.10
+pgvector>=0.3,<0.6
+pydantic>=2.9,<2.14
+pydantic-settings>=2.5,<2.16
+
+# Gemini. Mistral is reached over plain HTTP with the standard library, so it
+# adds no dependency; this is the only model SDK in the tree.
+google-genai>=1.0,<1.76
+mcp>=1.26.0,<1.31
+
+# Imported by our own code and, until now, present only because other packages
+# pulled them in: Fernet encrypts the provider key (services/provider_key.py),
+# httpx delivers webhooks (services/webhooks.py), and httpcore under it pins
+# each delivery to the address the check approved (2026-10-06). A dependency
+# we import is a dependency we declare, or the day mcp or google-genai drops
+# it, an image build drops it too.
+cryptography>=42,<50.1
+httpx>=0.27,<0.29
+httpcore>=1.0,<2
+# The same rule, found by tests/test_requirements_lock.py (audit of 17 Oct
+# 2026): starlette is imported beside FastAPI (main.py, api/spa.py,
+# api/oauth.py), which accepts any starlette from 0.46 on; pydantic-core
+# carries the request bodies' own errors (api/_bodies.py).
+starlette>=1.0,<1.8
+pydantic-core>=2.23,<2.47
+# anyio shields an MCP tool call cancelled by its client until the call's
+# thread has ended (core/threads.off_the_loop, audit of 20 Oct 2026);
+# starlette and the MCP SDK already run on it.
+anyio>=4.0,<4.16
+
+# The local embedder (EMBEDDING_PROVIDER=local, core/local_embedder.py): ONNX
+# Runtime runs EmbeddingGemma on the CPU, SentencePiece reads its tokenizer
+# (one wheel, no dependencies; `tokenizers` would have brought huggingface-hub
+# and its tree), numpy carries the tensors. In every image, so that switching
+# the provider on is a rebuild that downloads the weights and nothing else.
+# The weights come only with EMBEDDING_PROVIDER=local (Dockerfile, `model`).
+onnxruntime>=1.30,<1.31
+sentencepiece>=0.2.1,<0.3
+numpy>=2.0,<2.5

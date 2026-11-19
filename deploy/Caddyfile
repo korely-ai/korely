@@ -1,0 +1,162 @@
+# Reverse proxy and TLS.
+#
+# With DOMAIN set, Caddy obtains and renews a Let's Encrypt certificate on its
+# own: no cron, no certbot, no expiry at 3am eighteen months from now. Without
+# it, the site address falls back to localhost and Caddy issues its own
+# certificate, which is right for a laptop and wrong for anything else.
+#
+# There is no plain-HTTP option here on purpose. This service carries other
+# people's customer data, and an install that is easy to leave unencrypted
+# eventually is.
+#
+# `ACME_CA` exists for the one case that sits between those two: somebody
+# evaluating, who rebuilds the same machine several times in a week. Let's
+# Encrypt allows five certificates per week for the same exact name, and a
+# rebuild that drops the `caddy_data` volume throws away the certificate it
+# already had and asks for another. Five rebuilds and the sixth gets nothing,
+# with no page and no warning: port 80 still redirects to a 443 that has no
+# certificate to offer.
+#
+# Point it at the staging directory and the whole ACME path still runs, on
+# limits that are effectively unreachable. The certificate is untrusted, so a
+# browser objects and `curl` needs `-k`, which is the right trade while
+# evaluating and the wrong one afterwards. Leave it unset in production.
+#
+#   ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	# No proxy is trusted to name the client (see reverse_proxy below);
+	# if one is ever added here, its X-Forwarded-For is read right to left.
+	servers {
+		trusted_proxies_strict
+	}
+	# Caddy's own log (a proxy that cannot reach the API, a certificate)
+	# carries the request too: the same filters as the access log below.
+	log default {
+		output stdout
+		format filter {
+			wrap console
+			request>uri delete
+			resp_headers>Location delete
+			request>headers>X-Korely-Alert-Secret delete
+			request>headers>Referer delete
+		}
+	}
+}
+
+{$DOMAIN:localhost} {
+	encode gzip
+
+	# No body past the largest the API takes (/v1/batch, about 75 MB at the
+	# worst its 500 items can be spelled): the API refuses each route's own
+	# ceiling before reading (services/limits.body_cap), and this stops the
+	# rest at the door (audit of 17 Oct 2026).
+	request_body {
+		max_size 80MB
+	}
+
+	# The MCP transport streams; buffering it would make an agent wait for the
+	# whole response before seeing any of it.
+	#
+	# X-Forwarded-For is written, not appended to: the API believes this
+	# Caddy, by its service name (FORWARDED_ALLOW_IPS=caddy, Dockerfile),
+	# and takes the client from the header. An appended header lets the
+	# client choose that address, and with it the login lock, the address
+	# in the LOGIN audit row and the per-network caps (audit of 17 Oct
+	# 2026). With no `trusted_proxies` here, {client_ip} is the address
+	# of the connection itself, and whatever the client sent is dropped:
+	# Caddy's own default too, written out so a later edit cannot lose it.
+	# Behind another proxy (a CDN) add `trusted_proxies` to the global
+	# `servers` block above: `trusted_proxies_strict` makes Caddy read that
+	# proxy's header from the right, so the client's entries never count.
+	#
+	# A request that arrives while the API restarts (every upgrade, every
+	# deploy, a reboot) is held and sent once the API is back, instead of
+	# answered 502: Caddy tries again every 250ms for up to 20s. A restart
+	# took 3 to 11 s from the command to ready, and a request was held at
+	# most 10.3 s (scripts/caddy_restart_check.sh); the SDKs wait 30 s by
+	# default, so past 20 s a client hears Caddy's 502, not its own timeout.
+	# Caddy sends a request again only when no connection to the API could
+	# be made (the API's port refused, from the moment it stops listening
+	# to the moment it listens again), for every method. `lb_retry_match`
+	# with a condition no request meets turns off Caddy's own default for
+	# the rest, a GET sent again after its connection was made, so a
+	# request that brought the API down is not sent to it again by Caddy.
+	# Under Caddy, Go's transport still sends again, once, a request that
+	# failed on a kept-alive connection the API had closed, when HTTP lets
+	# it: a GET, HEAD, OPTIONS or TRACE, or a request with no body and an
+	# Idempotency-Key (net/http, Request.isReplayable). A request with a
+	# body and no such key, a write, is never sent twice: one that went out
+	# as the API stopped answers 502 ("A proxy MUST NOT automatically retry
+	# non-idempotent requests", RFC 9110 section 9.2.2), and its client may
+	# send it again with an Idempotency-Key.
+	#
+	# A client that gives up before the API is back has not stopped the
+	# write: over HTTP/1.1 Caddy notices a client gone only once it has read
+	# the body, which it reads only when it sends the request (a POST was
+	# sent 3.9 s after its client left). A client whose timeout is under the
+	# 20s here and that sends a write again sends the same Idempotency-Key
+	# header on every resend of that write (the SDKs take `idempotency_key`
+	# from korely-memory 0.2.1), or the write is made twice.
+	# https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#lb_try_duration
+	# (and #lb_try_interval, #lb_retry_match)
+	#
+	# The body is sent again from the request itself, with no copy: from
+	# Caddy 2.11.4 a body no upstream has read is kept across a failed
+	# connection (caddyserver/caddy#7547). Before, the connection's failure
+	# closed it, and the retry answered 502 "invalid Read on closed Body"
+	# (#7546): a POST got that while a GET was held and served. Hence the
+	# Caddy image docker-compose.yml names. No `request_buffers`
+	# (https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#request_buffers):
+	# on 2.11.4 and later it adds nothing to this, at a cost of up to its
+	# size per request with a body, and on Caddy 2.10 and earlier a failed
+	# connection hands its copy back to the pool the other requests draw
+	# from while the retry still reads it: on 2.8.4, with 256KiB and eight
+	# clients writing through two restarts and two recreations, 4 of the
+	# 794 writes answered 201 were stored with the body of another write,
+	# one that had been answered 502.
+	reverse_proxy api:8000 {
+		flush_interval -1
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {client_ip}
+		lb_try_duration 20s
+		lb_try_interval 250ms
+		lb_retry_match expression false
+	}
+
+	# `?`: only where the answer has none (Caddy's header directive: "The
+	# field is only written if it doesn't yet exist"). The application says
+	# its own on every answer: the screen's pages `strict-origin-when-cross-
+	# origin` and a Content-Security-Policy, the rest `no-referrer`
+	# (api/spa.py); until 1.0.27 this block overwrote the screen's with
+	# `no-referrer`.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		?X-Frame-Options "DENY"
+		?Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Every request on stdout with its method, status, timing and host, and
+	# no address: not the path and query (`request>uri`), not the Location of
+	# a redirect (the same path). A path can carry an end user, and cutting it
+	# by segments kept one that was a segment (audit of 27 Oct 2026). The API's own
+	# access line writes each path by its route (main.loggable_path): read
+	# the path there.
+	# Authorization and Cookie Caddy writes as REDACTED itself; the Cloud's
+	# billing alert secret, a header of the request, is dropped. So is the
+	# Referer: it is the address of the page that asked, path and query
+	# whole (a page of the dashboard sends it to its own origin, under its
+	# `strict-origin-when-cross-origin`), and so the address all over again.
+	log {
+		output stdout
+		format filter {
+			wrap console
+			request>uri delete
+			resp_headers>Location delete
+			request>headers>X-Korely-Alert-Secret delete
+			request>headers>Referer delete
+		}
+	}
+}
