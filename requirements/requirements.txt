@@ -25,7 +25,7 @@
 # the new version, in the same commit.
 fastapi>=0.115,<0.142
 uvicorn[standard]>=0.32,<0.53
-sqlalchemy>=2.0,<2.1
+sqlalchemy>=2.1.9,<2.2
 alembic>=1.13,<1.20
 psycopg2-binary>=2.9,<2.10
 pgvector>=0.3,<0.6
