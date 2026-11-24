@@ -1,0 +1,44 @@
+# scripts/two_processes.sh's stack: two Korely processes, each with its worker,
+# on one Postgres, a stand-in writer and a webhook endpoint. The database lives
+# in memory and goes with `down`. Not an install: see docker-compose.yml.
+name: korely-two-processes
+x-api: &api
+  image: ${KORELY_IMAGE}
+  depends_on: {db: {condition: service_healthy}}
+  # No restart: a process that dies at the start must fail the run, where
+  # docker-compose.yml's `unless-stopped` would hide it.
+  restart: "no"
+  environment:
+    POSTGRES_PASSWORD: two-processes
+    DATABASE_URL: postgresql://korely@db:5432/korely
+    SECRET_KEY: two-processes-only-a-throwaway-secret-key
+    PUBLIC_BASE_URL: http://localhost:18001
+    EXTRACTION_PROVIDER: mistral
+    MISTRAL_API_KEY: none
+    MISTRAL_API_BASE: http://writer:9000/v1
+    MISTRAL_EXTRACTION_MODEL: stand-in
+    WEBHOOK_ALLOW_PRIVATE_URLS: "true"
+    WEBHOOK_ALLOW_HTTP: "true"
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    shm_size: 1gb
+    environment: {POSTGRES_USER: korely, POSTGRES_PASSWORD: two-processes, POSTGRES_DB: korely}
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U korely -d korely"], interval: 2s, retries: 30}
+  writer:
+    image: ${KORELY_IMAGE}
+    entrypoint: ["uvicorn", "fake_model:app", "--host", "0.0.0.0", "--port", "9000", "--app-dir", "/t", "--log-level", "warning"]
+    volumes: [".:/t:ro"]
+    healthcheck: {disable: true}
+  hooks:
+    image: ${KORELY_IMAGE}
+    entrypoint: ["uvicorn", "receiver:app", "--host", "0.0.0.0", "--port", "9100", "--app-dir", "/t", "--log-level", "warning"]
+    volumes: [".:/t:ro"]
+    healthcheck: {disable: true}
+  api1:
+    <<: *api
+    ports: ["127.0.0.1:18001:8000"]
+  api2:
+    <<: *api
+    ports: ["127.0.0.1:18002:8000"]

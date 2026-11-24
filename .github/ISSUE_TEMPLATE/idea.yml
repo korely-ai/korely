@@ -1,0 +1,14 @@
+name: An idea or a missing piece
+description: Something the product does not do, or a text that says something the code does not do.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you need, and why
+      description: The situation you are in, and what you would do with it.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What you do today instead
