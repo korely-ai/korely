@@ -1,0 +1,31 @@
+{
+  "files": {
+    "__init__.py": "3ae82c746c0f7555727226063e5fc0b6cd98c3b764c0cb0302948f3fcafccb51",
+    "candidates.py": "c6ffe11bb07c85e2c4efebfdf63433ccf80b211bcca0bae1e25b9d39b332da05",
+    "contradiction.py": "24a8f7d6f881ec7ae65cf3eca400884565ee3c234554c0b5bfa3d3ebc471ea07",
+    "extraction.py": "0e47bdf000ae38259397615b378ba2a16134d4d5ba7d15feef82b177b3675f05",
+    "fact_extractor.py": "b43f6ab8a96a527f4e1880aeb0b1d8679cbc6bda3b4110f0b9fd4f934784555c",
+    "fact_time.py": "4f51e9664b46633944291814fd2e326c9ca79bc1caf399dde6a3c437675b6f91",
+    "families.py": "687f60d108c75efbdef713f7cb4f9d380ab879ee721e619ca94425ba71671469",
+    "identity.py": "770149aeefde96e4945e38dfae6b9b98cb0ca2636fdb03ad80ef7707b6e0692f",
+    "judge.py": "f478236246490de6e8231c2dfbf0d2204afced8c18fa770c580e7934b0900b25",
+    "log_safe.py": "f213836914d6cf038792992051717b93ff02ae60bb90f60c02fe612a69eed069",
+    "manifest.py": "bd0ac69aee9b1ba963a0fa1f8b9f61fcd19eb6b813d2ab5b985784908304a285",
+    "model_json.py": "e1a0c50b89bb411b1d078da191a293ef1ff872802ab96fde98840b3abdb7fa31",
+    "objects.py": "d3d1e96f3b9e8213268b23ace407644f824da729f5dd6661ba68ce21b3b56288",
+    "owner.py": "32869ea75e0f0ae92ac7e18961d2f6e3d833ac76952b17777e5607509a98a019",
+    "predicate_forms.py": "2d8a7fbeff08f3816f4a56975140636bfbf1f425b00cc46657f10f120159c46d",
+    "presentation.py": "325517f71dd7c8dc14f6f5f822489c57d248d9ceb5652cc527a05a8174d1d084",
+    "quality.py": "4f0db048efd5f79156cedd5739ed50d451fafc6e8adeb8c424c196d84ae1a089",
+    "relative_time.py": "01c42429f180a352299a8958081b8bc84a17f600746f9a99d8e6aa00d78341f2",
+    "sentences.py": "7b01cb9260e762353746f46d1dbaa80dc130ffcbce40fc6fd201193102fff1c1",
+    "store.py": "4f4072e80ef2dab21ee37e6faa0329d3650c931bd7ba01c7df3128d99b7124fe",
+    "thresholds.py": "f34f8c6a459a6da6c25d7ce3f11befdefe8838981555b320f7c15fc40901c0fc",
+    "twins.py": "e887a10e5e0e03f0e1e45efbc5836b14a7836e5702f81f386589e70ce7d1ba98",
+    "vector_search.py": "d7937453fe0702de85734a9b7d0c68c1d79055fc5bfa4aca3862af61cda3e0ba",
+    "vocabulary.py": "24eb4149df9288193d5fad1328b18c9f79939dde2a875cca52155818af60e4d2",
+    "worker.py": "35967a5575b54c0373b1e8f82b0aa316c0cee7c37d8ddcfac3511a9f3e3ddc9a",
+    "writing.py": "f6181d0034dc1c9788ade2bea44cc4d91a38282b5dce67d204f0513e3c29409e"
+  },
+  "version": "6.28.1"
+}

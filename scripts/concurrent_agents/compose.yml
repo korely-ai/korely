@@ -1,0 +1,43 @@
+# scripts/concurrent_agents.sh's stack: two Korely processes (each with its
+# worker) on one Postgres, a stand-in model and a webhook counter. Its own
+# project name and ports (18011/18012), so it runs beside two_processes.sh.
+# The database lives in memory and goes with `down`.
+name: korely-concurrent-agents
+x-api: &api
+  image: ${KORELY_IMAGE}
+  depends_on: {db: {condition: service_healthy}}
+  restart: "no"
+  environment:
+    POSTGRES_PASSWORD: concurrent-agents
+    DATABASE_URL: postgresql://korely@db:5432/korely
+    SECRET_KEY: concurrent-agents-only-a-throwaway-secret-key
+    PUBLIC_BASE_URL: http://localhost:18011
+    EXTRACTION_PROVIDER: mistral
+    MISTRAL_API_KEY: none
+    MISTRAL_API_BASE: http://writer:9000/v1
+    MISTRAL_EXTRACTION_MODEL: stand-in
+    WEBHOOK_ALLOW_PRIVATE_URLS: "true"
+    WEBHOOK_ALLOW_HTTP: "true"
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    shm_size: 1gb
+    environment: {POSTGRES_USER: korely, POSTGRES_PASSWORD: concurrent-agents, POSTGRES_DB: korely}
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U korely -d korely"], interval: 2s, retries: 30}
+  writer:
+    image: ${KORELY_IMAGE}
+    entrypoint: ["uvicorn", "fake_model:app", "--host", "0.0.0.0", "--port", "9000", "--app-dir", "/t", "--log-level", "warning"]
+    volumes: ["./:/t:ro"]
+    healthcheck: {disable: true}
+  hooks:
+    image: ${KORELY_IMAGE}
+    entrypoint: ["uvicorn", "receiver:app", "--host", "0.0.0.0", "--port", "9100", "--app-dir", "/t", "--log-level", "warning"]
+    volumes: ["../two_processes:/t:ro"]
+    healthcheck: {disable: true}
+  api1:
+    <<: *api
+    ports: ["127.0.0.1:18011:8000"]
+  api2:
+    <<: *api
+    ports: ["127.0.0.1:18012:8000"]
