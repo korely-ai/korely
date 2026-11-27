@@ -20,6 +20,7 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/github/v/tag/korely-ai/korely?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache 2.0"></a>
   <a href="https://pypi.org/project/korely-memory/"><img src="https://img.shields.io/pypi/v/korely-memory?label=python%20client" alt="Python client on PyPI"></a>
+  <a href="https://glama.ai/mcp/servers/korely-ai/korely"><img src="https://glama.ai/mcp/servers/korely-ai/korely/badges/score.svg" alt="Korely MCP server on Glama"></a>
 </p>
 
 Korely Agent gives your AI agents a memory that keeps its history. When
